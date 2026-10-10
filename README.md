@@ -13,6 +13,12 @@
 
 ## 安装
 
+源码仓库：[qixian771-spec/claude-client-full-reset](https://github.com/qixian771-spec/claude-client-full-reset)。当前公开版本为开发预览，发布前待修项尚未完成。
+
+```bash
+git clone https://github.com/qixian771-spec/claude-client-full-reset.git
+```
+
 从仓库下载源码并解压，将包含 `SKILL.md`、`scripts/`、`references/` 的整个文件夹命名为 `claude-client-full-reset`，复制到对应工具的 skills 目录。若目标目录已存在，先检查现有版本，不要合并覆盖。
 
 | 工具 | 用户级安装目录 |

@@ -2,7 +2,7 @@
 
 ## 方案与范围
 
-来源：用户提供的 `claude-client-full-reset.zip`。本轮准备可审阅的本地 Git 仓库；MIT 授权已经用户确认。源脚本保留，未执行扫描、备份或清理。远程仓库尚未创建。
+来源：用户提供的 `claude-client-full-reset.zip`。MIT 授权已经用户确认。源脚本保留，未执行扫描、备份或清理。用户随后授权上传，已创建公开仓库 [qixian771-spec/claude-client-full-reset](https://github.com/qixian771-spec/claude-client-full-reset)，以开发预览源码形式分发。
 
 流程：方案 → 拆解任务 → 任务卡 → 执行 → 测试 → 验收 → 提交。
 
@@ -35,4 +35,4 @@
 - 基础分发扫描：未命中所检查的 GitHub/Anthropic 凭证、私钥头和作者本机绝对路径模式；此结果不替代完整审计。
 - 清理行为与端到端验收：未执行。
 - 配置里程碑：本地静态验收通过；本文件随配置一起提交到 main。GitHub Actions 尚未远程运行。
-- 整体发布：未验收、未上传 GitHub。
+- 整体发布：仅发布开发预览源码；清理功能尚未验收，不标记稳定版本。
