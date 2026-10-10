@@ -30,4 +30,10 @@
 
 ## GitHub 验证
 
-待本次提交推送后记录 macOS / Linux 工作流结果。Linux 的 macOS 原生 ditto 测试明确跳过，其他可移植逻辑测试运行；Finder 原生往返在本机完成。
+代码提交 `904ffb6` 已通过 [GitHub Actions](https://github.com/qixian771-spec/claude-client-full-reset/actions/runs/38085182935)：
+
+- macOS 14 / Python 3.12 / Node.js 22：结构检查、47 项 Python 测试、10 项 JavaScript 测试通过。
+- Ubuntu 24.04 / Python 3.12 / Node.js 22：结构检查通过；Python 测试 46 项通过、1 项 macOS 原生 ditto 测试按平台明确跳过；10 项 JavaScript 测试通过。
+- Finder 原生往返在本机完成，未声称 GitHub 无界面 runner 执行过该交互。
+
+本次功能修复完成所定义范围的测试与验收；使用者仍需按实际目标完成自己的备份和清理验收。
