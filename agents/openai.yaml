@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude 本地数据检查与重置"
+  short_description: "检查 macOS 上 Claude 本地数据，按清单备份并清理"
+  default_prompt: "使用 $claude-client-full-reset 只检查本机 Claude 的数据与残留，先展示清单。"

@@ -1,0 +1,16 @@
+.DS_Store
+._*
+.workbuddy/
+.env
+.env.*
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+*.log
+*.zip
+Claude-Reset-Backup-*/
+backups/
+.claude/
+.claude.json
+coverage/
