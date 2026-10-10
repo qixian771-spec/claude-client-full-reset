@@ -1,188 +1,92 @@
 ---
 name: claude-client-full-reset
-description: 在 macOS 上把 Claude Code CLI 与 Claude Desktop 的数据面做「重置式」清理，使客户端呈现全新安装状态——清除 machineID/userID/ant-did 设备标识、Keychain 条目、Cookie 与各类本地存储、缓存、日志、编辑器扩展残留、浏览器痕迹与 shell 环境变量。当用户表达下列任一意图时使用：「把 Claude 的缓存/残留/设备指纹清掉」「重置 Claude CLI 或桌面端」「清掉设备 ID / machineID」「换号或买新号前把机器清一遍」「账号老被封，查查是不是本机有残留」「彻底卸载 Claude 并清干净」「模拟全新设备登录」。覆盖分层切分（身份层/痕迹层/自有资产）、先备份后动手、移入废纸篓而非 rm、多 ant-did 陷阱、浏览器全 profile 扫描、SQLite/LevelDB 清除边界与全盘终检。
+description: 检查、备份和清理 macOS 上 Claude Code 与 Claude Desktop 的本地数据。适用于用户要求检查残留、重置客户端或清理卸载后的本地文件；先报告范围、校验备份，再按确认清单处理。保留用户技能和设置，不承诺消除服务端记录、解除账号限制或物理擦除磁盘。
 license: MIT
 ---
 
-# macOS · Claude 客户端全量重置
+# Claude 本地数据检查与重置
 
-把 Claude Code CLI 与 Claude Desktop 在 macOS 上的**数据面**清成一个全新安装的状态。
-本 skill 面向「清理作业」：先普查、再备份、后分批删除、最后用脚本断言残留为 0。
+所有命令以本 skill 目录为工作目录。支持 macOS；Python 3.10+、Bash 是基础依赖。LevelDB 清理另需 Node.js 18+，先在本目录运行 `npm ci`。
 
-## 核心心智模型（先对齐认知，再动手）
+## 操作约束
 
-**本地清理对服务端是零可见的**，它不抹掉任何已上传的记录。唯一价值是：
-
-> **让新号登录时不带着旧指纹上去。**
-
-| 路径 | 服务端能看到 |
-|---|---|
-| 命令行 CLI | 出口 IP + 凭证 + 客户端版本（**不带指纹/Cookie**） |
-| 浏览器 | 多得多：Cookie、设备 ID、登录检测标记、各类指纹 |
-
-封号归因是**五层锚点**（出口 IP / 设备指纹 / 支付主体 / 邮箱域 / 使用行为），**必须成组替换**，
-单换 IP 或单清设备都无效。**本 skill 只解决其中一层**——必须主动把这个边界告诉用户。
-
-## 何时用 / 何时不用
-
-**用**：重置客户端、反关联前清理、彻底卸载、"模拟全新设备"。
-**不用**：只是想登出账号（浏览器里点一下即可）；只想清磁盘空间（那是另一回事）。
-
-## 铁律（四条，不可协商）
-
-1. **先备份，后动手。** 备份必须含 `~/.claude`、`~/.claude.json`、App Support、plist、Caches、HTTPStorages、Logs。
-   备份完留 md5 → 这是「备份 == 清理前状态」的唯一硬证据。
-2. **移入废纸篓，不用 `rm -rf`。** 同卷移动是秒级 rename，随时可取回。
-3. **先出清单、取得确认、再删。** 清单与执行**不能是同一批命令**，否则"确认"形同虚设。
-4. **删前确认无相关进程在跑。** 否则会改到一半被内存状态回写覆盖。
-
-## 分层切分（整套流程的关键洞察）
-
-`~/.claude` **不是缓存**，是混合体。刀口画在「身份层 + 痕迹层」与「自有资产」之间：
-
-| 层 | 内容 | 动作 |
-|---|---|---|
-| **身份层** | `~/.claude.json` 的 `machineID` `userID`；`App Support/Claude/ant-did`、`Claude-3p/ant-did`；桌面端 Cookies / Local State / Preferences / DIPS / Trust Tokens / fcache / Network Persistent State / TransportSecurity；Local Storage / Session Storage / IndexedDB / blob_storage / shared_proto_db；Keychain `Claude Safe Storage` | **切除** |
-| **痕迹层** | `~/.claude/projects`（常 40M+）`history.jsonl` `sessions` `tasks` `teams` `shell-snapshots` `session-env` `file-history` `paste-cache` `.cc-writes`；`~/Library/Logs/Claude`、`Caches`、`HTTPStorages`、plist、sentry、Crashpad | **切除** |
-| **自有资产** | `~/.claude/agents` `skills` `hooks` `scripts` `gsd-core` `gsd-*.json` `settings.json`（含网关配置）`plugins` `CLAUDE.md` `backups` | **保留**（除非用户明确要求清空） |
-
-**必须主动提示**：删 `settings.json` = 立即失去网关通道；删 `agents/` `skills/` `gsd-core/` = 工作流框架全废。
-
-完整的「层 × 位置 × 判据 × 动作」穷举表见 `references/coverage-matrix.md` —— **执行前先通读，执行中当 checklist。**
-
----
+- **错误必须停止。** 权限不足、数据损坏、进程查询失败、备份校验失败都不能解释为“干净”。不更换实现、不吞错误、不跳过失败目标继续宣告成功。
+- **确认具体范围。** 用户授权检查不等于授权删除。展示目标、影响及备份位置后，按用户已确认清单执行；不要重复请求已有授权。
+- **修改前备份。** 实际移动、SQLite 和 LevelDB 修改必须提供 `--backup`。清单须覆盖目标及相关数据库 sidecar，并与当前内容一致。备份需要私密保存，不能上传 GitHub。
+- **退出相关应用。** 备份、清理和验收前退出 Claude、浏览器及支持的编辑器。无法判断进程状态时停止。浏览器扫描也要求浏览器关闭，以取得一致数据。
+- **保留用户资产。** `~/.claude/skills`、agents、hooks、settings、plugins 等不属于默认痕迹清单。删整个 `~/.claude` 需要用户明确授权；不要因文件名包含 Claude 就删除技能或项目。
+- 只通过 Finder 移动批准文件；不清空废纸篓、不直接强制删除用户目录。脚本默认预览，写入必须加 `--apply`。
 
 ## 工作流
 
-五阶段。**阶段之间必须停下来给用户看结果**，不要一口气跑完。
+### 1. 检查与界定
 
-### Stage 0 · 只读普查
+先读 [覆盖范围](references/coverage-matrix.md)。
 
 ```bash
-bash scripts/scan_readonly.sh              # 全量
-bash scripts/scan_readonly.sh --no-browser # 跳过浏览器层（省时）
-python3 scripts/browser_scan.py            # 浏览器层单独细查
+bash scripts/scan_readonly.sh
+bash scripts/scan_readonly.sh --no-browser
+python3 scripts/browser_scan.py --deep
 ```
 
-产出：命中项清单 + 身份键存在性（**只报存在性与条数，绝不打印 cookie/token/machineID 的值**）。
-→ 参考 `references/coverage-matrix.md` 逐层核对，特别是 L5 系统层与 L7 编辑器层。
+只报告路径、键存在数量、命中计数，不输出凭证或浏览器键值。`--no-browser` 是用户明确缩小范围，不能据此宣称完成浏览器验收。检查不会运行 shell 启动文件。
 
-### Stage 1 · 备份 + 硬证据
+### 2. 备份并验证
 
 ```bash
 bash scripts/backup.sh
-bash scripts/backup.sh --dest /Volumes/Ext/claude-bk   # 备份到异盘更稳
+bash scripts/backup.sh --dest /absolute/existing/backup-parent
+# 浏览器、应用本体等非默认目标，必须显式加入备份：
+bash scripts/backup.sh --include "/absolute/browser/Profile 1"
+python3 scripts/backup.py --verify /absolute/backup-directory
 ```
 
-产出：备份目录 + `MD5SUMS.txt` + 自动生成的 `RESTORE.md`。
+复制只使用 macOS `ditto`，失败立即停止。成功备份包含 `manifest.json`（完整 SHA-256 内容清单）与 `RESTORE.md`。校验比较源、副本和源的复制后状态，覆盖所有备份文件及链接。备份目录不覆盖现有目录。
 
-### Stage 2 · 出清单 + 确认
+默认清单不包含浏览器 profile、钥匙串或应用本体；新增目标用重复 `--include` 指定。恢复规则见 [恢复说明](references/restore-and-rebuild.md)。
 
-把「要删什么 / 各属于哪一层 / 其中哪些是自有资产」列成表交用户确认。
-**这一步不执行任何删除。** 自有资产单列并标注可恢复性（见 `references/restore-and-rebuild.md`）。
-
-### Stage 3 · 分批删除
+### 3. 确认清单后清理
 
 ```bash
-bash scripts/trash_paths.sh --dry-run "/path/a" "/path/b"   # 先看
-bash scripts/trash_paths.sh "/path/a" "/path/b"             # 再删（≤10/批，批后复核）
+bash scripts/trash_paths.sh --dry-run /absolute/approved/path
+bash scripts/trash_paths.sh --apply --backup /absolute/backup-directory /absolute/approved/path
 ```
 
-危险路径（`/`、`$HOME`、`/Applications`、`/Library` …）会被硬拒绝。
-清单也可从 stdin 喂入：`printf '%s\n' "$p1" "$p2" | bash scripts/trash_paths.sh -`
+每次 1–10 项。全批路径与备份校验通过后才开始移动；任一操作失败就停止，并报告可能已完成的前序操作。拒绝系统根目录、家目录和常用容器、路径穿越、符号链接、重复或父子重叠目标。路径范围见覆盖表。
 
-### Stage 4 · 精删（需逐条清到表/列/key 级别）
+### 4. 浏览器精删（按需）
+
+先读 [浏览器规则](references/browser-layer.md)。
 
 ```bash
-# 浏览器 SQL 层（默认 dry-run；检测到浏览器运行中会直接拒绝）
-python3 scripts/chrome_purge.py
-python3 scripts/chrome_purge.py --apply
-
-# Local Storage 按 key 精删（需 npm i classic-level）
-node scripts/ls_purge.js
-node scripts/ls_purge.js --apply
+python3 scripts/chrome_purge.py --browser Chrome --profile "Profile 1"
+python3 scripts/chrome_purge.py --browser Chrome --profile "Profile 1" --apply --backup /absolute/backup-directory
+node scripts/ls_purge.js --browser Chrome --profile "Profile 1"
+node scripts/ls_purge.js --browser Chrome --profile "Profile 1" --apply --backup /absolute/backup-directory
 ```
 
-**边界必须交代清楚**（详见 `references/browser-layer.md`）：
-- SQL `DELETE` 清不掉 BLOB 命中（`LIKE` 遇 `\x00` 截断）与未 `VACUUM` 的旧页 → 那类只能**整文件删**
-- LevelDB `del()` 是**逻辑删除** → 要"磁盘无痕迹"必须**整目录删** `Local Storage`
+只处理 `claude.ai` / `anthropic.com` 及子域的文本记录或 Local Storage key。普通人名、其他域名和 BLOB 不按任意关键词删除。预览使用临时副本，不写原数据库。SQLite 中出现触发器、外键或不支持的虚拟表会停止，不能关闭约束绕过。
 
-**先问用户要哪个判据**：功能上不存在（精删够） vs 磁盘上无痕迹（必须整删）。
+SQLite 每库事务、LevelDB 每库原子 batch；多库操作不构成跨库事务。后续库出错时保留备份，报告前序已执行内容，不能宣布整批成功或自动切换整库删除。
 
-### Stage 5 · 全盘终检
+### 5. 验收
 
 ```bash
-python3 scripts/verify_reset.py          # 七维度，退出码 0 = PASS
-python3 scripts/verify_reset.py --deep   # 追加 Chrome HTTP 缓存扫描
+python3 scripts/verify_reset.py
+python3 scripts/verify_reset.py --deep
+python3 scripts/verify_reset.py --uninstalled
 ```
 
-**以脚本退出码为准，不以"我看了一遍"为准。**
+| 退出码 | 含义 |
+| --- | --- |
+| 0 | 所列范围检查成功且未见命中；或指定备份/修改操作成功 |
+| 1 | 扫描存在命中，需要人工判断；不是执行错误 |
+| 2 | 前提、输入、依赖、权限、数据库或执行错误；不得继续清理 |
 
-脚本自带**前提校验**：若检测到 Claude 仍处于已安装/运行状态，返回退出码 2 并声明「本报告不能作为残留已清零的依据」——因为此时命中项大多是**当前安装的组成部分**，而非历史残留。这是最容易自欺的地方：把活跃安装的 53 个正常文件读成「51 项残留」。
+未捕获的运行环境故障也可能返回其他非零状态，均视为失败。`--uninstalled` 额外检查应用及 PATH 中的 CLI；默认验收允许保留应用和自有资产。废纸篓中的 Claude 文件会继续被报告，不应为取得 PASS 自动清空。
 
----
+使用 [证据报告](references/evidence-log.md) 输出命令、退出码、实际范围、保留项和未检查项。PASS 只适用于覆盖表，不能解读为全盘擦除、服务端删除或新设备身份。
 
-## 脚本清单（调用契约）
+## 故障处理
 
-| 脚本 | 阶段 | 读写 | 说明 |
-|---|---|---|---|
-| `scripts/scan_readonly.sh` | 0 | **只读** | 全机普查，输出 FOUND/CLEAR |
-| `scripts/browser_scan.py` | 0 / 4 | **只读** | 全部浏览器 × 全部 profile × 全部库；`--deep` 加扫 HTTP 缓存 |
-| `scripts/backup.sh` | 1 | 写备份 | ditto + md5 + 生成 RESTORE.md |
-| `scripts/trash_paths.sh` | 3 | 删除 | 移入废纸篓；危险路径 DENY；≤10/批；退出码 = FAIL 数 |
-| `scripts/chrome_purge.py` | 4 | 改库 | SQL 精删 + VACUUM；默认 dry-run；浏览器运行中拒跑 |
-| `scripts/ls_purge.js` | 4 | 改库 | Local Storage 按 key 删；默认 dry-run；需 classic-level |
-| `scripts/verify_reset.py` | 5 | **只读** | 七维度终检；退出码 0=PASS / 1=有残留 / 2=前提不满足；内置状态判定与依赖名噪声判定 |
-
-运行环境：macOS、Bash、Python 3；Python 3 需预先安装并验证可用。`ls_purge.js` 另需 Node.js 18+，在 skill 根目录运行 `npm ci` 安装锁定的依赖。缺少依赖时停止并报告。
-
----
-
-## 参考文件（按需加载，不要全读）
-
-| 文件 | 何时读 |
-|---|---|
-| `references/coverage-matrix.md` | **每次执行前**——系统性核查表 |
-| `references/browser-layer.md` | 要处理浏览器痕迹时（含全 profile 铁律、Chrome History 四张旁表） |
-| `references/pitfalls.md` | 写 shell/SQL 命令前；遇命令"返回 0 但没生效"时 |
-| `references/restore-and-rebuild.md` | 判断可恢复性、写回滚说明、区分依赖名噪声时 |
-| `references/evidence-log.md` | 要交付报告时——证据分级与报告模板 |
-
----
-
-## 验收判据
-
-- `python3 scripts/verify_reset.py` 退出码 = **0**
-
-  | 退出码 | 含义 | 该怎么办 |
-  |---|---|---|
-  | **0** | PASS —— 无活跃安装，实质残留 0 | 交付 |
-  | **1** | FAIL —— 无活跃安装，仍有实质残留 | 回到 Stage 3 / 4 继续清 |
-  | **2** | **前提不满足** —— 检测到 Claude 已安装/在运行 | **先卸载或退出再验收**；这不是「清理失败」，而是「结论无效」 |
-
-- 七维度实质残留合计 = **0**；噪声与有意保留项**已显式列出并给出理由**
-- 干净 login shell 无 `ANTHROPIC_*` / `CLAUDE_*` / `HEADROOM_*`：
-  ```bash
-  env -i HOME="$HOME" TERM=xterm /bin/zsh -l -c 'env | grep -E "^(ANTHROPIC|CLAUDE|HEADROOM)"'
-  ```
-- `zsh -n ~/.zshrc` / `bash -n ~/.bashrc` 通过
-- 备份目录存在且 `md5 -c MD5SUMS.txt` 一致
-
-交付报告用 `references/evidence-log.md` 的模板——**前后对照 + 退出码 + 保留项理由**。
-
----
-
-## 常见场景速查
-
-**「清完但我的工作流还在吗」** → 保留 L4 自有资产；需重建项见 `references/restore-and-rebuild.md`。
-
-**「彻底卸载」** → 除上述外再加：
-```bash
-bash scripts/trash_paths.sh /Applications/Claude.app
-"$HOME/.nvm/versions/node/<ver>/bin/npm" uninstall -g @anthropic-ai/claude-code
-rm -rf "$HOME/.nvm/versions/node/<ver>/lib/node_modules/@anthropic-ai"
-rm -f  "$HOME/.nvm/versions/node/<ver>/bin/claude"   # 断链必须显式删，[ -e ] 判不出来
-```
-然后用 `ls -la ~/.nvm/versions/node/*/bin/ | grep -i claude` 复核。
-
-**「只想知道有没有残留，先别删」** → 只跑 Stage 0 的只读脚本，出报告即可。
+读 [常见故障](references/pitfalls.md)。失败必须修复原因后由用户确认重试范围；不得 `|| true`、吞异常、伪造成功校验或重新生成备份清单掩盖损坏。
