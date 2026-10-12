@@ -15,6 +15,10 @@
 | 系统指定目录 | 用户与系统 DiagnosticReports；家目录 Applications、.Trash；用户 Containers、Group Containers、Application Scripts 的名称 | 家目录下明确目标；系统只允许 `/Applications/Claude.app` 及指定名称的系统诊断文件 |
 | Shell | 5 个用户 rc 文件的静态赋值/alias 行，以及当前进程环境变量名称 | 不运行 rc、不自动改 shell 配置 |
 
+## 环境检测入口
+
+`check_environment.py` 是单独的只读准备入口：常见安装路径、工具可执行路径、部分本地数据/配置和进程数量；不做浏览器数据扫描。仅找到候选路径不保证安装完整；不读取凭证内容，不执行 Claude，不联网或改环境。检测范围和退出码见 [环境检测与配置](environment-check.md)。
+
 ## 不在自动检查范围
 
 钥匙串、LaunchServices 注册、APFS/Time Machine 快照、系统应用近期列表、任意项目目录、npm 缓存、其他用户、外置盘、登录 shell 动态行为。针对这些内容，需要另行确认范围和人工检查，不得依赖本脚本退出码表示已处理。

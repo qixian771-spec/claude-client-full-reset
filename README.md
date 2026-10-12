@@ -1,6 +1,6 @@
 # Claude Client Full Reset
 
-macOS 上 Claude Code / Claude Desktop 本地数据检查、备份与清理的 Agent Skill。MIT 开源。
+macOS 上 Claude Code / Claude Desktop 环境检测、本地数据检查、备份与清理的 Agent Skill。MIT 开源。
 
 支持本地文件检查、SHA-256 备份校验、Finder 废纸篓移动、SQLite 域名记录和 LevelDB key 清理。**清理默认预览，实际清理必须有校验通过的备份；恢复拒绝覆盖。** 不处理服务端数据，不承诺解除账号限制或物理擦除磁盘。
 
@@ -49,6 +49,22 @@ npm ci
 ```
 
 如果从安装目录运行，就在安装目录装依赖；如果从本次下载的源码运行，就在源码目录装依赖。
+
+## 不确定是否装过？先做环境检测
+
+在下载的源码或已安装 skill 根目录运行；可以保持现有软件运行：
+
+```bash
+python3 scripts/check_environment.py
+# 需要结构化报告时：
+python3 scripts/check_environment.py --json
+```
+
+只查常见安装路径、依赖路径、本地数据/配置位置和进程数量；不启动 Claude、不联网、不安装或修改环境。仅装这个 skill 不会被计作 Claude 使用记录。
+
+报告区分未发现、发现安装候选、只有本地数据和需审阅异常，并给出下一步。没有本地数据的人直接按 [首次安装清单](references/environment-check.md) 准备，无需先清理；已有环境的人先保留配置。权限或查询失败返回错误，不能当成“从没用过”。
+
+环境检测 0=完成且无基础准备问题，1=异常/基础依赖待处理，2=检测失败；0 不代表没有数据、能登录或从未使用。未查浏览器历史、云端、自定义路径等；无法判断账号是否被封，本地重置不能作为解除限制的证明。详见 [环境检测与配置](references/environment-check.md)。
 
 ## 从检查到清理
 

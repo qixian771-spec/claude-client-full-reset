@@ -1,4 +1,4 @@
 interface:
-  display_name: "Claude 本地数据检查与重置"
-  short_description: "检查 macOS 上 Claude 本地数据，按清单备份并清理"
-  default_prompt: "使用 $claude-client-full-reset 只检查本机 Claude 的数据与残留，先展示清单。"
+  display_name: "Claude 环境检测与本地重置"
+  short_description: "检测安装与依赖、准备配置清单，按授权备份和处理本地数据"
+  default_prompt: "使用 $claude-client-full-reset 只读检测本机 Claude 环境，列出缺少的准备项和适合的下一步，不启动或修改软件。"
