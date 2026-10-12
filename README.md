@@ -4,6 +4,14 @@ macOS 上 Claude Code / Claude Desktop 环境检测、本地数据检查、备�
 
 支持本地文件检查、SHA-256 备份校验、Finder 废纸篓移动、SQLite 域名记录和 LevelDB key 清理。**清理默认预览，实际清理必须有校验通过的备份；恢复拒绝覆盖。** 不处理服务端数据，不承诺解除账号限制或物理擦除磁盘。
 
+## 交给其他 AI 执行
+
+入口是 [SKILL.md](SKILL.md)，详细编排是 [AI 执行手册](references/agent-runbook.md)：任务输入 → 检测与路线选择 → 任务卡 → 分支执行 → 结果判断 → 验收交付。手册逐步列出前提、命令、停止条件和 14 个路线自查例子，避免把“检查、配置、清理、恢复”机械地从头跑到尾。
+
+可直接要求 AI：
+
+> 阅读 SKILL.md 和 references/agent-runbook.md，先提取我的目标、限制和已有授权，完成只读检测后选正确路线；列出任务卡再执行，不自动扩大范围，失败停止并保留证据。
+
 ## 首次准备
 
 需要 macOS、Python 3.10+、Git；仅 LevelDB 功能另需 Node.js 18+ 和 npm。先阅读 [首次准备](references/first-run.md)：依赖下载、终端选择、macOS 权限和浏览器路径定位均在其中。
