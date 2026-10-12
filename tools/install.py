@@ -8,7 +8,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 NAME = 'claude-client-full-reset'
-CONTENTS = ('SKILL.md', 'LICENSE', 'agents', 'scripts', 'references', 'package.json', 'package-lock.json')
+CONTENTS = ('SKILL.md', 'README.md', 'LICENSE', 'docs', 'agents', 'scripts', 'references', 'package.json', 'package-lock.json')
 
 
 def install(target):
@@ -48,7 +48,8 @@ def main():
         target = Path.home() / '.claude/skills' / NAME
     target = install(target)
     print(f'[OK] 已安装: {target}')
-    print('重新加载客户端。LevelDB 功能另需在该目录执行 npm ci。')
+    print('首次使用先读 references/first-run.md；LevelDB 功能另需在该目录执行 npm ci。')
+    print('Claude Code 只能协助准备；备份、清理和恢复需退出相关应用后在独立终端执行。')
     return 0
 
 

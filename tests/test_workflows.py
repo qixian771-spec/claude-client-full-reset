@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import re
 import unittest
 from unittest.mock import patch
 
@@ -64,7 +65,7 @@ class Fixture(unittest.TestCase):
         if source.is_symlink():
             target.symlink_to(os.readlink(source))
         elif source.is_dir():
-            shutil.copytree(source, target, symlinks=True)
+            shutil.copytree(source, target, symlinks=True, dirs_exist_ok=True)
         else:
             shutil.copy2(source, target)
         return ''
@@ -442,6 +443,10 @@ class InstallationTests(Fixture):
         target = self.home / 'installed-skill'
         install.install(target)
         self.assertTrue((target / 'SKILL.md').is_file())
+        for doc in target.rglob('*.md'):
+            for link in re.findall(r'\[[^\]]*\]\(([^)]+)\)', doc.read_text()):
+                if '://' not in link and not link.startswith('#'):
+                    self.assertTrue((doc.parent / link.split('#')[0]).is_file(), (doc, link))
         self.assertFalse((target / 'scripts/__pycache__').exists())
         for name in ('backup.sh', 'scan_readonly.sh', 'trash_paths.sh'):
             result = subprocess.run(['bash', str(target / 'scripts' / name), '--help'], capture_output=True, text=True)

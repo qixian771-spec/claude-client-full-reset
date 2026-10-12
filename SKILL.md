@@ -13,9 +13,13 @@ license: MIT
 - **错误必须停止。** 权限不足、数据损坏、进程查询失败、备份校验失败都不能解释为“干净”。不更换实现、不吞错误、不跳过失败目标继续宣告成功。
 - **确认具体范围。** 用户授权检查不等于授权删除。展示目标、影响及备份位置后，按用户已确认清单执行；不要重复请求已有授权。
 - **修改前备份。** 实际移动、SQLite 和 LevelDB 修改必须提供 `--backup`。清单须覆盖目标及相关数据库 sidecar，并与当前内容一致。备份需要私密保存，不能上传 GitHub。
-- **退出相关应用。** 备份、清理和验收前退出 Claude、浏览器及支持的编辑器。无法判断进程状态时停止。浏览器扫描也要求浏览器关闭，以取得一致数据。
+- **退出相关应用。** 备份、清理、恢复和验收前退出 Claude、浏览器及支持的编辑器。无法判断进程状态时停止。浏览器扫描也要求浏览器关闭，以取得一致数据。
 - **保留用户资产。** `~/.claude/skills`、agents、hooks、settings、plugins 等不属于默认痕迹清单。删整个 `~/.claude` 需要用户明确授权；不要因文件名包含 Claude 就删除技能或项目。
-- 只通过 Finder 移动批准文件；不清空废纸篓、不直接强制删除用户目录。脚本默认预览，写入必须加 `--apply`。
+- 只通过 Finder 移动批准文件；不清空废纸篓、不直接强制删除用户目录。清理脚本默认预览，实际清理必须加 `--apply`；恢复用 `--restore`，先以 `--dry-run` 预检。
+
+## 执行环境与交接
+
+首次使用先读 [环境与权限准备](references/first-run.md)。`--client claude` 指 Claude Code 的技能目录，不是 Desktop 导入入口。Claude Code 自身也属于必须退出的进程；在其会话或受检查编辑器内只能准备清单和说明，不得绕过进程检查来执行写入。把已确认路径、备份位置及逐步命令交给独立 Terminal/iTerm，由用户保存工作、正常退出相关应用后执行。脚本应位于待清理范围之外。不要擅自退出当前应用或代改隐私权限。
 
 ## 工作流
 
@@ -69,7 +73,19 @@ node scripts/ls_purge.js --browser Chrome --profile "Profile 1" --apply --backup
 
 SQLite 每库事务、LevelDB 每库原子 batch；多库操作不构成跨库事务。后续库出错时保留备份，报告前序已执行内容，不能宣布整批成功或自动切换整库删除。
 
-### 5. 验收
+### 5. 局部恢复（按需）
+
+先读 [恢复说明](references/restore-and-rebuild.md)。部分清理后使用 `--path` 指定原始目标或备份内子路径；不指定才是整包恢复。不得为了通过整包恢复而删除其他保留配置。
+
+```bash
+python3 scripts/backup.py --list /absolute/backup-directory
+python3 scripts/backup.py --restore /absolute/backup-directory --path /absolute/original/target --dry-run
+python3 scripts/backup.py --restore /absolute/backup-directory --path /absolute/original/target
+```
+
+先预检，确认后恢复；全备份仍须校验、目标必须不存在。复制失败保留不完整目标并停止；不会自动扩大范围或覆盖。SQLite/LevelDB 修改后不能直接覆盖旧数据，按恢复说明保持整个数据库及配套文件一致。
+
+### 6. 验收
 
 ```bash
 python3 scripts/verify_reset.py

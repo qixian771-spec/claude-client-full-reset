@@ -107,8 +107,14 @@ def create_backup(dest, extra=()):
     (folder / 'RESTORE.md').write_text(
         '# 备份校验与恢复\n\n在 skill 根目录执行（使用本备份目录的绝对路径）：\n\n'
         '```bash\npython3 scripts/backup.py --verify /absolute/backup-directory\n'
-        'python3 scripts/backup.py --restore /absolute/backup-directory\n```\n\n'
-        '恢复前退出相关应用。目标路径必须不存在；不会合并或覆盖。'
+        'python3 scripts/backup.py --list /absolute/backup-directory\n'
+        'python3 scripts/backup.py --restore /absolute/backup-directory --path /absolute/original/target --dry-run\n'
+        'python3 scripts/backup.py --restore /absolute/backup-directory --path /absolute/original/target\n```\n\n'
+        '把占位符替换为备份及原目标的绝对路径。--path 可重复，只恢复指定目标或备份内的子路径；'
+        '不指定 --path 才是整包恢复，要求全部原目标都不存在。局部清理后通常应使用 --path。'
+        '恢复前退出相关应用，在独立终端执行。所选目标必须不存在；不会合并或覆盖。'
+        '仍存在的配置、SQLite/LevelDB 数据不要强行覆盖；先另行备份并确认移走具体目标。'
+        '复制失败会保留可能产生的不完整目标并停止，不会自动删除、重试或扩大范围。'
         'manifest.json 记录完整 SHA-256 内容清单、目录与符号链接；不是签名或防篡改证明。\n')
     verify_backup(folder)
     print(f'[OK] 备份与源数据一致: {folder}')
@@ -159,24 +165,77 @@ def require_covered(folder, target):
     raise ValueError(f'备份未覆盖目标: {target}')
 
 
-def restore(folder):
+def restore_plan(folder, data, paths=None):
+    """Resolve exact original paths, including descendants, without writing."""
+    from trash_paths import validate_path
+    requested = [entry['source'] for entry in data['sources']] if paths is None else paths
+    if not requested:
+        raise ValueError('恢复清单不能为空')
+    targets = [validate_path(str(value), must_exist=False) for value in requested]
+    for i, target in enumerate(targets):
+        if any(target == other or target in other.parents or other in target.parents
+               for other in targets[i + 1:]):
+            raise ValueError('恢复清单包含重复或父子重叠路径')
+        if common.exists(target):
+            raise ValueError(f'恢复目标已存在，拒绝覆盖: {target}')
+    plan = []
+    for target in targets:
+        candidates = [entry for entry in data['sources']
+                      if target == Path(entry['source']) or Path(entry['source']) in target.parents]
+        if len(candidates) != 1:
+            raise ValueError(f'恢复目标没有唯一备份来源: {target}')
+        entry = candidates[0]
+        relative = target.relative_to(entry['source'])
+        key = relative.as_posix()
+        if key not in entry['entries']:
+            raise ValueError(f'备份未包含恢复目标: {target}')
+        if entry['entries'][key]['type'] not in ('file', 'dir'):
+            raise ValueError(f'不支持单独恢复符号链接目标: {target}')
+        source = folder / 'payload' / entry['stored'] / relative
+        no_symlink_parents(source)
+        expected = {}
+        for name, value in entry['entries'].items():
+            if key == '.':
+                expected[name] = value
+            elif name == key:
+                expected['.'] = value
+            elif name.startswith(key + '/'):
+                expected[name[len(key) + 1:]] = value
+        if inventory(source) != expected:
+            raise ValueError(f'待恢复副本校验失败: {target}')
+        plan.append((target, source, expected))
+    return plan
+
+
+def restore(folder, paths=None, dry_run=False):
     common.require_stopped()
     folder = Path(folder).resolve(strict=True)
     data = verify_backup(folder)
+    plan = restore_plan(folder, data, paths)
+    if dry_run:
+        for target, _, _ in plan:
+            print(f'[DRY] 将恢复: {target}')
+        return
     from trash_paths import validate_path
-    for entry in data['sources']:
-        target = Path(entry['source'])
+    for target, source, expected in plan:
+        common.require_stopped()
         validate_path(str(target), must_exist=False)
         if common.exists(target):
-            raise ValueError(f'恢复目标已存在，拒绝覆盖: {target}')
-    for entry in data['sources']:
-        target = Path(entry['source'])
-        if common.exists(target):
             raise ValueError(f'恢复过程中目标出现，停止: {target}')
+        if inventory(source) != expected:
+            raise ValueError(f'待恢复副本已变化，停止: {target}')
         target.parent.mkdir(parents=True, exist_ok=True)
-        common.run(['ditto', str(folder / 'payload' / entry['stored']), str(target)])
-        if inventory(target) != entry['entries']:
+        # Reserve the exact destination exclusively; an intervening existing
+        # target must fail instead of being merged or overwritten by ditto.
+        if expected['.']['type'] == 'dir':
+            target.mkdir(mode=0o700)
+        else:
+            fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            os.close(fd)
+        common.run(['ditto', str(source), str(target)])
+        if inventory(target) != expected:
             raise RuntimeError(f'恢复内容验证失败: {target}')
+        print(f'[OK] 已恢复并验证: {target}')
     print('[OK] 恢复并验证完成')
 
 
@@ -185,13 +244,18 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--verify', type=Path)
     mode.add_argument('--restore', type=Path)
+    mode.add_argument('--list', dest='list_backup', type=Path, help='校验备份并列出原始来源路径')
     mode.add_argument('--check-path', type=Path)
     parser.add_argument('--backup', type=Path)
     parser.add_argument('--dest', type=Path)
     parser.add_argument('--include', action='append', default=[])
+    parser.add_argument('--path', action='append', help='仅恢复指定原始绝对路径，可重复；仅与 --restore 使用')
+    parser.add_argument('--dry-run', action='store_true', help='仅预检并显示恢复计划；仅与 --restore 使用')
     args = parser.parse_args()
     common.require_macos()
-    has_mode = args.verify is not None or args.restore is not None or args.check_path is not None
+    has_mode = any(value is not None for value in (args.verify, args.restore, args.check_path, args.list_backup))
+    if (args.path is not None or args.dry_run) and args.restore is None:
+        parser.error('--path/--dry-run 只能与 --restore 一起使用')
     if has_mode and (args.dest is not None or args.include):
         parser.error('--dest/--include 只能用于创建备份')
     if args.backup and args.check_path is None:
@@ -200,7 +264,12 @@ def main():
         verify_backup(args.verify)
         print('[OK] SHA-256 内容清单校验通过')
     elif args.restore:
-        restore(args.restore)
+        restore(args.restore, args.path, args.dry_run)
+    elif args.list_backup:
+        data = verify_backup(args.list_backup)
+        for entry in data['sources']:
+            print(f'[SOURCE] {entry["source"]}')
+        print('只列来源路径，不输出内容；可用 --path 选择来源或其中具体子路径。')
     elif args.check_path:
         if not args.backup:
             parser.error('--check-path 需要 --backup')
