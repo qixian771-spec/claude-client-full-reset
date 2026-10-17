@@ -2,7 +2,7 @@
 
 | 验收项 | 结果 |
 | --- | --- |
-| 自动测试（macOS 本地） | Python 208 项通过（8 项为其他平台原生测试跳过）；JavaScript 18 项通过 |
+| 自动测试（macOS 本地） | Python 206 项通过（其中 8 项为其他平台的原生测试，在 macOS 跳过）；JavaScript 18 项通过 |
 | GitHub Actions | ubuntu-24.04、macos-14（Py 3.10/3.12）、windows-2022（Py 3.10/3.12，Node 18/22）全部通过 |
 | T16 本机真实运行 | 内置终端扫描：退出 2 + 完全磁盘访问权限的下一步；Claude 运行时 SQLite/LevelDB 预览：退出 2 + 应用名清单与退出方法（Node 侧转述同一提示） |
 | T17 原生 | macOS/Windows runner 6 项全 ✅；本机如实报应用在运行、缺完全磁盘访问权限，估算默认备份约 13.6 GB；Windows 实机 6 项全 ✅、退出 0 |
