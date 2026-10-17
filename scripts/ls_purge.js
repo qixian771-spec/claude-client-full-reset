@@ -48,7 +48,7 @@ function inventory(root, prefix = '') {
 function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 function requireStopped(run = execFileSync) {
   // Share the same process rules with the Python entry points.
-  run('python3', ['-c', 'import common; common.require_macos(); common.require_stopped()'],
+  run('python3', ['-c', 'import common; common.require_supported(); common.require_stopped()'],
     { cwd: __dirname, encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 function requireCovered(backupDir, dir) {

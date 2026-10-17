@@ -7,7 +7,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from test_workflows import Fixture, backup, common
+from test_workflows import Fixture, REAL_CURRENT, backup, common, platforms
 
 
 class SelectiveRestoreTests(Fixture):
@@ -202,7 +202,7 @@ class SelectiveRestoreTests(Fixture):
         folder = self.backup()
         target.unlink()
         args = ['backup', '--restore', str(folder), '--path', str(target)]
-        with patch.object(common, 'require_macos'), contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(common, 'require_supported', return_value=platforms.MACOS), contextlib.redirect_stdout(io.StringIO()):
             with patch.object(sys, 'argv', [*args, '--dry-run']):
                 self.assertEqual(backup.main(), 0)
             self.assertFalse(target.exists())
@@ -217,7 +217,7 @@ class SelectiveRestoreTests(Fixture):
                      ['--verify', str(self.dest), '--path', str(self.home / 'data')],
                      ['--list', str(self.dest), '--dry-run'],
                      ['--restore', str(self.dest), '--include', str(self.home)]):
-            with self.subTest(argv=argv), patch.object(common, 'require_macos'), patch.object(sys, 'argv', ['backup', *argv]), contextlib.redirect_stderr(io.StringIO()):
+            with self.subTest(argv=argv), patch.object(common, 'require_supported', return_value=platforms.MACOS), patch.object(sys, 'argv', ['backup', *argv]), contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit) as exc:
                     backup.main()
                 self.assertEqual(exc.exception.code, 2)

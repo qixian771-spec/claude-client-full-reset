@@ -13,7 +13,7 @@ def main():
     parser.add_argument('--no-browser', action='store_true')
     parser.add_argument('--deep', action='store_true')
     args = parser.parse_args()
-    common.require_macos()
+    common.require_supported()
     path = Path.home() / '.claude.json'
     if common.exists(path):
         common.regular(path)

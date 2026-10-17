@@ -74,19 +74,19 @@ def purge_db(path, apply_changes=False):
 
 
 def main():
+    platform = common.require_supported()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--backup', type=Path)
-    parser.add_argument('--browser', choices=[name for name, _ in BS.BROWSERS])
+    parser.add_argument('--browser', choices=platform.browser_names())
     parser.add_argument('--profile')
     args = parser.parse_args()
-    common.require_macos()
     common.require_stopped()
     if args.apply and not args.backup:
         parser.error('--apply 需要 --backup')
     files = []
     profiles = 0
-    for name, root in BS.BROWSERS:
+    for name, root in BS.browser_roots():
         if args.browser and name != args.browser:
             continue
         for profile, folder in BS.iter_profiles(root):

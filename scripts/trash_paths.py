@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import common
 import backup
+import platforms
 
 
 def validate_path(raw, must_exist=True):
@@ -14,19 +15,14 @@ def validate_path(raw, must_exist=True):
     backup.no_symlink_parents(path)
     if path.is_symlink():
         raise ValueError('不支持移动符号链接（包括断链）；请单独检查')
+    platform = platforms.current()
     home = Path.home().resolve()
     protected = {home, *home.parents}
-    protected.update(home / x for x in (
-        'Library', 'Library/Application Support', 'Library/Caches', 'Library/Logs',
-        'Library/Preferences', 'Library/HTTPStorages', 'Library/Containers',
-        'Library/Group Containers', 'Library/Application Scripts', '.Trash',
-        'Desktop', 'Documents', 'Downloads', 'Pictures', 'Movies', 'Music',
-        'Applications', '.config', '.local', '.ssh', '.codex', '.agents',
-        '.vscode', '.cursor', '.windsurf'))
+    protected.update(platform.resolve_all(platform.protected, home))
     if path in protected or any(p in path.parents for p in (home / '.Trash', home / '.ssh')):
         raise ValueError(f'拒绝危险路径: {path}')
-    allowed = home in path.parents or path == Path('/Applications/Claude.app')
-    diagnostic = Path('/Library/Logs/DiagnosticReports')
+    allowed = home in path.parents or path in platform.resolve_all(platform.trash_allowed, home)
+    diagnostic = platform.resolve(platform.trash_diagnostic_dir, home)
     if path.parent == diagnostic and path.name.lower().startswith(('claude', 'anthropic')):
         allowed = True
     if not allowed:
@@ -79,7 +75,7 @@ def main():
     parser.add_argument('--backup', type=Path)
     parser.add_argument('paths', nargs='+')
     args = parser.parse_args()
-    common.require_macos()
+    common.require_supported()
     paths = args.paths
     if paths == ['-']:
         paths = sys.stdin.read().splitlines()

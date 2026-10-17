@@ -9,13 +9,15 @@ import sqlite3
 import sys
 from urllib.parse import quote
 import common
+import platforms
 
-HOME = Path.home()
-LIB = HOME / 'Library'
-APPSUP = LIB / 'Application Support'
-BROWSERS = [(name, APPSUP / sub) for name, sub in common.BROWSER_PATHS]
 PAT = re.compile(rb'claude|anthropic', re.I)
 CHUNK = 1024 * 1024
+
+
+def browser_roots():
+    """Supported Chromium roots for the current platform and home directory."""
+    return platforms.current().browsers()
 
 
 def byte_hits(path):
@@ -105,9 +107,10 @@ def scan_profile(root):
 
 def scan_safari():
     result = []
-    root = LIB / 'Safari'
+    platform = platforms.current()
+    root = platform.resolve(platform.safari_root)
     if common.directory(root):
-        for name in ('History.db', 'RecentlyClosedTabs.plist', 'Downloads.plist'):
+        for name in platform.safari_files:
             path = root / name
             if common.exists(path):
                 count = byte_hits(path)
@@ -119,7 +122,8 @@ def scan_safari():
 
 def scan_http_cache():
     count = size = 0
-    for path in common.walk_files(LIB / 'Caches/Google/Chrome'):
+    platform = platforms.current()
+    for path in common.walk_files(platform.resolve(platform.browser_cache)):
         size += path.stat().st_size
         count += bool(byte_hits(path))
     return [], count, size
@@ -127,7 +131,7 @@ def scan_http_cache():
 
 def collect(deep=False, browsers=None):
     result = {'chromium': [], 'safari': [], 'profiles': 0, 'files': 0, 'cache': None}
-    for name, root in BROWSERS if browsers is None else browsers:
+    for name, root in browser_roots() if browsers is None else browsers:
         for profile, folder in iter_profiles(root):
             result['profiles'] += 1
             for entry, count, sql in scan_profile(folder):
@@ -153,7 +157,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--deep', action='store_true')
     args = parser.parse_args()
-    common.require_macos()
+    common.require_supported()
     common.require_stopped(browsers_only=True)
     result = collect(args.deep)
     for browser, profile, entry, count, sql in result['chromium']:

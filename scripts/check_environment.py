@@ -4,13 +4,11 @@ import argparse
 import json
 import os
 from pathlib import Path
-import re
 import stat
 import sys
 
-import backup
 import common
-import verify_reset
+import platforms
 
 LABELS = {
     'not_detected': '常见位置未发现安装或本地数据',
@@ -18,8 +16,6 @@ LABELS = {
     'local_data_only': '未发现安装，发现本地数据/配置',
     'needs_review': '发现异常或范围不确定，需要人工检查',
 }
-ASSETS = ('settings.json', 'settings.local.json', '.credentials.json', 'agents', 'hooks', 'plugins')
-TOOLS = ('bash', 'ditto', 'osascript', 'git', 'node', 'npm')
 
 
 def executable_info(path):
@@ -52,10 +48,11 @@ def command_paths(name, search_path):
 
 
 def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
+    platform = platforms.current()
     home = Path.home() if home is None else Path(home)
     search_path = os.environ.get('PATH', os.defpath) if search_path is None else search_path
-    app_paths = [Path('/Applications/Claude.app'), home / 'Applications/Claude.app'] if app_paths is None else app_paths
-    cli_paths = [home / '.local/bin/claude', Path('/opt/homebrew/bin/claude'), Path('/usr/local/bin/claude')] if cli_paths is None else cli_paths
+    app_paths = platform.resolve_all(platform.desktop_apps, home) if app_paths is None else app_paths
+    cli_paths = platform.resolve_all(platform.cli_candidates, home) if cli_paths is None else cli_paths
     issues = []
     desktop = []
     for path in map(Path, app_paths):
@@ -76,11 +73,10 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
             cli.append(entry)
     issues.extend({'path': item['path'], 'reason': item['reason']} for item in cli if not item['usable_path'])
     active_cli = [item['path'] for item in cli if item['usable_path']]
-    candidates = [home / source for source, _ in backup.CORE
-                  if source not in ('.claude', '.zshrc', '.bashrc', '.profile', '.zprofile', '.zshenv')]
-    candidates += [home / '.claude' / name for name in verify_reset.TRACE_NAMES]
-    candidates += [home / '.config/claude', home / '.anthropic']
-    candidates += [home / '.claude' / name for name in ASSETS]
+    candidates = platform.client_data_paths(home)
+    candidates += [home / '.claude' / name for name in platform.trace_names]
+    candidates += platform.resolve_all(platform.extra_config, home)
+    candidates += [home / '.claude' / name for name in platform.asset_names]
     local = []
     for path in candidates:
         if common.exists(path):
@@ -91,22 +87,20 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
     skill_present = common.exists(home / '.claude/skills/claude-client-full-reset/SKILL.md')
     claude_root = home / '.claude'
     if common.directory(claude_root):
-        known = set(verify_reset.TRACE_NAMES) | set(ASSETS) | {'skills'}
+        known = set(platform.trace_names) | set(platform.asset_names) | {'skills'}
         unknown = sum(child.name not in known for child in claude_root.iterdir())
         if unknown:
             issues.append({'reason': f'.claude 含 {unknown} 个范围未识别的顶层项目，需人工审阅；未读取内容'})
     processes = common.process_list()
     related = len(common.relevant_processes(processes))
-    claude_running = sum(bool('/Claude.app/' in proc or Path(proc).name.startswith('Claude Helper')
-                              or re.search(r'(?:^|/)claude(?:\s|$)', proc, re.I)
-                              or '/@anthropic-ai/claude-code/' in proc) for proc in processes)
+    claude_running = sum(platform.is_claude_process(proc) for proc in processes)
     if claude_running and not (desktop or active_cli):
         issues.append({'reason': '发现 Claude 进程但常见位置无安装路径，可能位于自定义位置'})
-    tools = {name: command_paths(name, search_path) for name in TOOLS}
+    tools = {name: command_paths(name, search_path) for name in platform.tools}
     issues.extend({'path': item['path'], 'reason': name + ': ' + item['reason']}
                   for name, paths in tools.items() for item in paths if not item['usable_path'])
     python_ok = sys.version_info >= (3, 10)
-    missing = [name for name in ('bash', 'ditto', 'osascript')
+    missing = [name for name in platform.base_tools
                if not any(item['usable_path'] for item in tools[name])]
     if issues:
         status = 'needs_review'
@@ -147,7 +141,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--json', action='store_true', help='输出结构化报告；错误退出 2，不能当作无安装')
     args = parser.parse_args()
-    common.require_macos()
+    common.require_supported()
     report = collect()
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))

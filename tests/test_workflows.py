@@ -21,6 +21,9 @@ import chrome_purge as SQL
 import trash_paths as trash
 import verify_reset as verify
 import scan_readonly as scan
+import platforms
+
+REAL_CURRENT = platforms.current
 
 
 @contextlib.contextmanager
@@ -48,8 +51,8 @@ class Fixture(unittest.TestCase):
         self.stack = contextlib.ExitStack()
         self.stack.enter_context(patch.object(Path, 'home', return_value=self.home))
         self.stack.enter_context(patch.object(common, 'process_list', return_value=[]))
-        self.stack.enter_context(patch.object(BS, 'LIB', self.home / 'Library'))
-        self.stack.enter_context(patch.object(BS, 'BROWSERS', []))
+        self.stack.enter_context(patch.object(platforms, 'current', return_value=platforms.MACOS))
+        self.stack.enter_context(patch.object(BS, 'browser_roots', return_value=[]))
         self.addCleanup(self.temp.cleanup)
         self.addCleanup(self.stack.close)
 
@@ -76,6 +79,11 @@ class Fixture(unittest.TestCase):
 
 
 class ProcessTests(unittest.TestCase):
+    def setUp(self):
+        context = patch.object(platforms, 'current', return_value=platforms.MACOS)
+        context.start()
+        self.addCleanup(context.stop)
+
     def test_detect_paths_and_helpers(self):
         procs = ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
                  '/x/Google Chrome Helper (Renderer)', '/x/Claude.app/Contents/MacOS/Claude',
@@ -322,15 +330,15 @@ class ScanTests(Fixture):
 
     def test_scan_cli_parse_failure_exit2(self):
         self.file('.claude.json', '{')
-        with patch.object(common, 'require_macos'), patch.object(sys, 'argv', ['scan', '--no-browser']), contextlib.redirect_stderr(io.StringIO()):
+        with patch.object(common, 'require_supported', return_value=platforms.MACOS), patch.object(sys, 'argv', ['scan', '--no-browser']), contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(common.cli(scan.main), 2)
 
     def test_verify_check_error_exit2_not_pass(self):
-        with patch.object(common, 'require_macos'), patch.object(verify, 'collect', side_effect=PermissionError('denied')), patch.object(sys, 'argv', ['verify']), contextlib.redirect_stderr(io.StringIO()):
+        with patch.object(common, 'require_supported', return_value=platforms.MACOS), patch.object(verify, 'collect', side_effect=PermissionError('denied')), patch.object(sys, 'argv', ['verify']), contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(common.cli(verify.main), 2)
 
     def test_verify_clean_and_matches(self):
-        with patch.object(common, 'require_macos'), patch.object(sys, 'argv', ['verify']), contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(common, 'require_supported', return_value=platforms.MACOS), patch.object(sys, 'argv', ['verify']), contextlib.redirect_stdout(io.StringIO()):
             with patch.object(verify, 'collect', return_value={'test': []}):
                 self.assertEqual(verify.main(), 0)
             with patch.object(verify, 'collect', return_value={'test': ['hit']}):
@@ -418,10 +426,10 @@ class SQLiteTests(Fixture):
             SQL.purge_db(self.db)
 
     def test_cli_invalid_profile_and_missing_backup_fail(self):
-        with patch.object(common, 'require_macos'), patch.object(sys, 'argv', ['sql', '--profile', 'missing']):
+        with patch.object(common, 'require_supported', return_value=platforms.MACOS), patch.object(sys, 'argv', ['sql', '--profile', 'missing']):
             with self.assertRaises(ValueError):
                 SQL.main()
-        with patch.object(common, 'require_macos'), patch.object(sys, 'argv', ['sql', '--apply']), contextlib.redirect_stderr(io.StringIO()):
+        with patch.object(common, 'require_supported', return_value=platforms.MACOS), patch.object(sys, 'argv', ['sql', '--apply']), contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit) as ctx:
                 SQL.main()
             self.assertEqual(ctx.exception.code, 2)
@@ -431,7 +439,7 @@ class SQLiteTests(Fixture):
         profile.mkdir(parents=True)
         self.db.rename(profile / 'History')
         folder = self.backup([str(profile)])
-        with patch.object(BS, 'BROWSERS', [('Fixture', profile.parent)]), patch.object(common, 'require_macos'), patch.object(sys, 'argv', ['sql', '--apply', '--backup', str(folder)]), contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(BS, 'browser_roots', return_value=[('Fixture', profile.parent)]), patch.object(common, 'require_supported', return_value=platforms.MACOS), patch.object(sys, 'argv', ['sql', '--apply', '--backup', str(folder)]), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(SQL.main(), 0)
         self.assertEqual(SQL.purge_db(profile / 'History')[0], 0)
         backup.verify_backup(folder)

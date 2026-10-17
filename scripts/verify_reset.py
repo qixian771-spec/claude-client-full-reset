@@ -7,10 +7,8 @@ import re
 import sys
 import common
 import browser_scan
-import backup
+import platforms
 
-TRACE_NAMES = ('projects', 'history.jsonl', 'sessions', 'tasks', 'teams',
-               'shell-snapshots', 'session-env', 'file-history', 'paste-cache', '.cc-writes')
 PAT = re.compile(r'claude|anthropic', re.I)
 ENV_PAT = re.compile(r'^(ANTHROPIC|CLAUDE|HEADROOM)[A-Z_]*$')
 RC_PATTERN = re.compile(r'^\s*(?:export\s+)?(?:ANTHROPIC|CLAUDE|HEADROOM)[A-Z_]*=|^\s*alias\s+claude=')
@@ -18,16 +16,16 @@ RC_PATTERN = re.compile(r'^\s*(?:export\s+)?(?:ANTHROPIC|CLAUDE|HEADROOM)[A-Z_]*
 
 def core_paths(home):
     # .claude contains user assets; do not classify the entire directory as cache.
-    paths = [home / src for src, _ in backup.CORE
-             if src not in ('.claude', '.zshrc', '.bashrc', '.profile', '.zprofile', '.zshenv')]
-    paths += [home / '.claude' / name for name in TRACE_NAMES]
-    paths += [home / '.config/claude', home / '.anthropic']
+    platform = platforms.current()
+    paths = platform.client_data_paths(home)
+    paths += [home / '.claude' / name for name in platform.trace_names]
+    paths += platform.resolve_all(platform.extra_config, home)
     return [str(path) for path in paths if common.exists(path)]
 
 
 def shell_findings(home):
     result = []
-    for name in ('.zshrc', '.zprofile', '.zshenv', '.bashrc', '.profile'):
+    for name in platforms.current().shell_files:
         path = home / name
         if common.exists(path):
             common.regular(path)
@@ -40,13 +38,12 @@ def shell_findings(home):
 
 
 def editor_findings(home):
+    platform = platforms.current()
     result = []
-    for name in ('.vscode', '.cursor', '.windsurf'):
-        folder = home / name / 'extensions'
+    for folder in platform.resolve_all(platform.editor_extensions, home):
         if common.directory(folder):
             result += [str(p) for p in folder.iterdir() if PAT.search(p.name)]
-    for editor in ('Code', 'Cursor', 'Windsurf'):
-        root = home / 'Library/Application Support' / editor / 'User'
+    for root in platform.resolve_all(platform.editor_user_dirs, home):
         for suffix in ('settings.json', 'globalStorage/state.vscdb'):
             path = root / suffix
             if common.exists(path) and browser_scan.byte_hits(path):
@@ -55,11 +52,9 @@ def editor_findings(home):
 
 
 def system_findings(home):
+    platform = platforms.current()
     result = []
-    for folder in (home / 'Library/Logs/DiagnosticReports', Path('/Library/Logs/DiagnosticReports'),
-                   home / '.Trash', home / 'Applications',
-                   home / 'Library/Containers', home / 'Library/Group Containers',
-                   home / 'Library/Application Scripts'):
+    for folder in platform.resolve_all(platform.system_dirs, home):
         if common.directory(folder):
             result += [str(p) for p in folder.iterdir() if PAT.search(p.name)]
     return result
@@ -89,7 +84,7 @@ def report(findings, quiet=False):
             for item in items:
                 print('  ' + item)
     print(f'命中项合计: {total}')
-    print('范围外：钥匙串、APFS/Time Machine、其他用户、外置盘、任意项目目录、npm 缓存、登录 shell 动态行为。')
+    print(platforms.current().out_of_scope)
     print('保留：.claude 中未列入痕迹清单的用户技能、设置等资产；单独保存的备份。')
     return total
 
@@ -100,11 +95,11 @@ def main():
     parser.add_argument('--quiet', action='store_true')
     parser.add_argument('--uninstalled', action='store_true', help='额外要求应用和 PATH 中的 CLI 已卸载')
     args = parser.parse_args()
-    common.require_macos()
+    platform = common.require_supported()
     common.require_stopped()
     if args.uninstalled:
         import shutil
-        if common.exists('/Applications/Claude.app') or common.exists(Path.home() / 'Applications/Claude.app') or shutil.which('claude'):
+        if any(common.exists(path) for path in platform.resolve_all(platform.desktop_apps)) or shutil.which('claude'):
             raise RuntimeError('卸载验收前提不满足：仍有 Claude 安装')
     total = report(collect(deep=args.deep), args.quiet)
     print('PASS：所列范围未见命中（不等于全盘擦除）' if not total else 'REVIEW：仍有命中项，需逐项判断')

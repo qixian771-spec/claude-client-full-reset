@@ -11,21 +11,13 @@ import sqlite3
 import subprocess
 import sys
 
-BROWSER_PATHS = [
-    ('Chrome', 'Google/Chrome'), ('Chrome Beta', 'Google/Chrome Beta'),
-    ('Chrome Canary', 'Google/Chrome Canary'), ('Edge', 'Microsoft Edge'),
-    ('Brave', 'BraveSoftware/Brave-Browser'), ('Vivaldi', 'Vivaldi'),
-    ('Chromium', 'Chromium'), ('Arc', 'Arc/User Data'),
-]
-APP_NAMES = ('Google Chrome', 'Google Chrome Beta', 'Google Chrome Canary',
-             'Microsoft Edge', 'Brave Browser', 'Vivaldi', 'Chromium', 'Arc',
-             'Safari', 'Claude', 'Code', 'Cursor', 'Windsurf')
+import platforms
+
 DOMAIN = re.compile(r'(?:^|[^a-z0-9.-])\.?(?:[a-z0-9-]+\.)*(?:claude\.ai|anthropic\.com)(?=[:/?#\x00]|$)', re.I)
 
 
-def require_macos():
-    if sys.platform != 'darwin':
-        raise RuntimeError('仅支持 macOS；未执行任何操作')
+def require_supported():
+    return platforms.current()
 
 
 def run(args):
@@ -83,14 +75,15 @@ def process_list():
 
 
 def relevant_processes(processes, browsers_only=False):
-    names = APP_NAMES[:9] if browsers_only else APP_NAMES
+    platform = platforms.current()
+    names = platform.browser_processes
+    if not browsers_only:
+        names = names + platform.client_processes
     found = []
     for proc in processes:
-        base = Path(proc).name
-        if any(base == name or base.startswith(name + ' Helper') or
-               f'/{name}.app/' in proc for name in names):
+        if platform.match_process(proc, names):
             found.append(proc)
-        elif not browsers_only and (re.search(r'(?:^|/)claude(?:\s|$)', proc, re.I) or '/@anthropic-ai/claude-code/' in proc):
+        elif not browsers_only and platform.is_cli_process(proc):
             found.append(proc)
     return found
 

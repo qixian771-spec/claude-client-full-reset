@@ -11,20 +11,6 @@ import tempfile
 from datetime import datetime, timezone
 import common
 
-CORE = [
-    ('.claude', 'dot-claude'), ('.claude.json', 'dot-claude.json'),
-    ('Library/Application Support/Claude', 'AppSupport-Claude'),
-    ('Library/Application Support/Claude-3p', 'AppSupport-Claude-3p'),
-    ('Library/Preferences/com.anthropic.claudefordesktop.plist', 'plist'),
-    ('Library/Caches/com.anthropic.claudefordesktop', 'Caches-app'),
-    ('Library/Caches/com.anthropic.claudefordesktop.ShipIt', 'Caches-ShipIt'),
-    ('Library/Caches/claude-cli-nodejs', 'Caches-cli'),
-    ('Library/HTTPStorages/com.anthropic.claudefordesktop', 'HTTPStorages-app'),
-    ('Library/Logs/Claude', 'Logs-Claude'), ('Library/Logs/Claude-3p', 'Logs-Claude-3p'),
-    ('Library/Saved Application State/com.anthropic.claudefordesktop.savedState', 'SavedState'),
-] + [(name, 'shell/' + name) for name in ('.zshrc', '.bashrc', '.profile', '.zprofile', '.zshenv')]
-
-
 def fingerprint(path):
     path = Path(path)
     info = path.lstat()
@@ -67,12 +53,14 @@ def no_symlink_parents(path):
 
 
 def create_backup(dest, extra=()):
+    platform = common.require_supported()
     common.require_stopped()
     home = Path.home().resolve()
     dest = Path(dest).resolve(strict=True)
     if not dest.is_dir():
         raise ValueError('备份父目录必须已存在')
-    sources = [(home / src, name) for src, name in CORE if common.exists(home / src)]
+    sources = [(platform.resolve(src, home), name) for src, name in platform.core()
+               if common.exists(platform.resolve(src, home))]
     for index, item in enumerate(extra):
         src = absolute_path(item)
         no_symlink_parents(src)
@@ -252,7 +240,7 @@ def main():
     parser.add_argument('--path', action='append', help='仅恢复指定原始绝对路径，可重复；仅与 --restore 使用')
     parser.add_argument('--dry-run', action='store_true', help='仅预检并显示恢复计划；仅与 --restore 使用')
     args = parser.parse_args()
-    common.require_macos()
+    common.require_supported()
     has_mode = any(value is not None for value in (args.verify, args.restore, args.check_path, args.list_backup))
     if (args.path is not None or args.dry_run) and args.restore is None:
         parser.error('--path/--dry-run 只能与 --restore 一起使用')

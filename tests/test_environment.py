@@ -7,7 +7,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from test_workflows import Fixture, backup, common
+from test_workflows import Fixture, REAL_CURRENT, backup, common, platforms
 import check_environment as env
 
 
@@ -16,7 +16,7 @@ class EnvironmentTests(Fixture):
         super().setUp()
         self.bin = self.home / 'bin'
         self.bin.mkdir()
-        for name in env.TOOLS:
+        for name in platforms.MACOS.tools:
             self.executable(name)
         self.apps = [self.home / 'Applications/Claude.app']
 
@@ -31,7 +31,7 @@ class EnvironmentTests(Fixture):
 
     def main(self, report, json_output=False):
         output = io.StringIO()
-        with patch.object(env, 'collect', return_value=report), patch.object(common, 'require_macos'), patch.object(sys, 'argv', ['check_environment', *(['--json'] if json_output else [])]), contextlib.redirect_stdout(output):
+        with patch.object(env, 'collect', return_value=report), patch.object(common, 'require_supported', return_value=platforms.MACOS), patch.object(sys, 'argv', ['check_environment', *(['--json'] if json_output else [])]), contextlib.redirect_stdout(output):
             code = env.main()
         return code, output.getvalue()
 
@@ -134,7 +134,7 @@ class EnvironmentTests(Fixture):
         with patch.object(common, 'process_list', side_effect=RuntimeError('ps failed')):
             with self.assertRaises(RuntimeError):
                 self.collect()
-        with patch.object(env, 'collect', side_effect=PermissionError('denied')), patch.object(common, 'require_macos'), patch.object(sys, 'argv', ['check_environment', '--json']), contextlib.redirect_stdout(io.StringIO()) as output, contextlib.redirect_stderr(io.StringIO()):
+        with patch.object(env, 'collect', side_effect=PermissionError('denied')), patch.object(common, 'require_supported', return_value=platforms.MACOS), patch.object(sys, 'argv', ['check_environment', '--json']), contextlib.redirect_stdout(io.StringIO()) as output, contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(common.cli(env.main), 2)
         self.assertEqual(output.getvalue(), '')
 
@@ -165,7 +165,7 @@ class EnvironmentTests(Fixture):
         self.assertEqual(self.collect()['status'], 'needs_review')
 
     def test_non_macos_cli_refuses_before_collect(self):
-        with patch.object(sys, 'platform', 'linux'), patch.object(sys, 'argv', ['check_environment']), patch.object(env, 'collect') as collect, contextlib.redirect_stderr(io.StringIO()):
+        with patch.object(platforms, 'current', REAL_CURRENT), patch.object(sys, 'platform', 'linux'), patch.object(sys, 'argv', ['check_environment']), patch.object(env, 'collect') as collect, contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(common.cli(env.main), 2)
         collect.assert_not_called()
 
