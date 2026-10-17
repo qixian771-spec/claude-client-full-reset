@@ -328,3 +328,19 @@ def current():
     if platform is None:
         raise RuntimeError(f'不支持的平台 {sys.platform}；仅支持 macOS 与 Windows；未执行任何操作')
     return platform
+
+
+def main():
+    """Print this platform's browser roots as JSON for scripts/ls_purge.js."""
+    import json
+    import common
+    if sys.argv[1:] != ['--browser-roots']:
+        raise ValueError('用法: platforms.py --browser-roots')
+    common.utf8_stdio()
+    print(json.dumps([[name, str(path)] for name, path in current().browsers()], ensure_ascii=False))
+    return 0
+
+
+if __name__ == '__main__':
+    import common
+    sys.exit(common.cli(main))

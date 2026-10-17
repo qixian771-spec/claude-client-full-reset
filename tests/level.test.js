@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { ClassicLevel } = require('classic-level');
-const { purgeDir, operate, inventory, requireStopped, iterProfiles } = require('../scripts/ls_purge');
+const { purgeDir, operate, inventory, requireStopped, iterProfiles, browserRoots, pythonCommand } = require('../scripts/ls_purge');
 
 async function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reset-level-test-'));
@@ -90,4 +90,30 @@ test('damaged DB cannot be interpreted as an empty DB', async t => {
   const { dir } = await fixture(t);
   fs.writeFileSync(path.join(dir, 'CURRENT'), 'invalid manifest');
   await assert.rejects(purgeDir(dir));
+});
+
+test('python launcher is explicit per platform and overridable', () => {
+  assert.deepEqual(pythonCommand({}, 'darwin'), ['python3', []]);
+  assert.deepEqual(pythonCommand({}, 'win32'), ['py', ['-3']]);
+  assert.deepEqual(pythonCommand({ CLAUDE_RESET_PYTHON: 'C:\\Python312\\python.exe' }, 'win32'),
+    ['C:\\Python312\\python.exe', []]);
+});
+test('process check runs the shared Python rules', () => {
+  let call;
+  requireStopped((command, args) => { call = [command, args]; return ''; });
+  assert.ok(call[1].some(arg => arg.includes('common.require_stopped()')));
+});
+test('browser roots come from the Python platform table and are validated', () => {
+  let call;
+  const roots = browserRoots((command, args) => { call = args; return '[["Edge", "C:\\\\Users\\\\u\\\\AppData\\\\Local\\\\Microsoft\\\\Edge\\\\User Data"]]'; });
+  assert.ok(call.some(arg => arg.endsWith('platforms.py')));
+  assert.deepEqual(roots, [['Edge', 'C:\\Users\\u\\AppData\\Local\\Microsoft\\Edge\\User Data']]);
+  for (const output of ['{"Chrome": "/x"}', '[["Chrome"]]', '[["Chrome", 3]]', 'not json']) {
+    assert.throws(() => browserRoots(() => output));
+  }
+  assert.throws(() => browserRoots(() => { throw new Error('python missing'); }), /python missing/);
+});
+test('no browser paths are hard-coded in the Node script', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/ls_purge.js'), 'utf8');
+  assert.doesNotMatch(source, /Application Support|User Data|Google\/Chrome|BraveSoftware/);
 });

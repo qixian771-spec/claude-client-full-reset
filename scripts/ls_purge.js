@@ -12,12 +12,6 @@ function loadDatabase() {
   catch (error) { throw new Error('无法加载 classic-level (' + error.code + ')；请在 skill 目录执行 npm ci'); }
 }
 
-const BROWSERS = [
-  ['Chrome', 'Google/Chrome'], ['Chrome Beta', 'Google/Chrome Beta'],
-  ['Chrome Canary', 'Google/Chrome Canary'], ['Edge', 'Microsoft Edge'],
-  ['Brave', 'BraveSoftware/Brave-Browser'], ['Vivaldi', 'Vivaldi'],
-  ['Chromium', 'Chromium'], ['Arc', 'Arc/User Data'],
-];
 const DOMAIN = /(?:^|[^a-z0-9.-])\.?(?:[a-z0-9-]+\.)*(?:claude\.ai|anthropic\.com)(?=[:/?#\x00]|$)/i;
 
 function exists(file) {
@@ -46,14 +40,31 @@ function inventory(root, prefix = '') {
   return items;
 }
 function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
-function requireStopped(run = execFileSync) {
-  // Share the same process rules with the Python entry points.
-  run('python3', ['-c', 'import common; common.require_supported(); common.require_stopped()'],
+// Platform rules (processes, browser roots, backups) live only in the Python
+// scripts. The interpreter is explicit: CLAUDE_RESET_PYTHON when set, else
+// the documented launcher for this OS. A missing interpreter is an error.
+function pythonCommand(env = process.env, platform = process.platform) {
+  if (env.CLAUDE_RESET_PYTHON) return [env.CLAUDE_RESET_PYTHON, []];
+  return platform === 'win32' ? ['py', ['-3']] : ['python3', []];
+}
+function python(args, run = execFileSync) {
+  const [command, prefix] = pythonCommand();
+  return run(command, [...prefix, ...args],
     { cwd: __dirname, encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] });
 }
+function requireStopped(run = execFileSync) {
+  python(['-c', 'import common; common.require_supported(); common.require_stopped()'], run);
+}
 function requireCovered(backupDir, dir) {
-  execFileSync('python3', [path.join(__dirname, 'backup.py'), '--check-path', dir, '--backup', backupDir],
-    { encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] });
+  python([path.join(__dirname, 'backup.py'), '--check-path', dir, '--backup', backupDir]);
+}
+function browserRoots(run = execFileSync) {
+  const roots = JSON.parse(python([path.join(__dirname, 'platforms.py'), '--browser-roots'], run));
+  if (!Array.isArray(roots) || !roots.every(item => Array.isArray(item) && item.length === 2 &&
+      item.every(part => typeof part === 'string'))) {
+    throw new Error('Invalid browser root list from platforms.py');
+  }
+  return roots;
 }
 function iterProfiles(root) {
   if (!exists(root)) return [];
@@ -111,18 +122,19 @@ async function main() {
     browser: { type: 'string' }, profile: { type: 'string' }, help: { type: 'boolean' },
   } });
   if (values.help) {
-    console.log('node scripts/ls_purge.js [--browser NAME] [--profile NAME] [--apply --backup /absolute/backup]');
+    console.log('node scripts/ls_purge.js [--browser NAME] [--profile NAME] [--apply --backup ABSOLUTE_BACKUP_DIR]');
+    console.log('Python: CLAUDE_RESET_PYTHON if set, otherwise python3 (macOS) or py -3 (Windows).');
     return;
   }
-  if (process.platform !== 'darwin') throw new Error('Only macOS is supported');
   if (values.apply && !values.backup) throw new Error('--apply requires --backup');
-  if (values.browser && !BROWSERS.some(([name]) => name === values.browser)) throw new Error('Unknown browser');
   requireStopped();
+  const roots = browserRoots();
+  if (values.browser && !roots.some(([name]) => name === values.browser)) throw new Error('Unknown browser');
   let profiles = 0;
   const plan = [];
-  for (const [name, relative] of BROWSERS) {
+  for (const [name, root] of roots) {
     if (values.browser && name !== values.browser) continue;
-    for (const [profile, folder] of iterProfiles(path.join(os.homedir(), 'Library/Application Support', relative))) {
+    for (const [profile, folder] of iterProfiles(root)) {
       if (values.profile && profile !== values.profile) continue;
       profiles++;
       const dir = path.join(folder, 'Local Storage/leveldb');
@@ -145,7 +157,7 @@ async function main() {
   }
   console.log(`matched_directories=${plan.length}; logical key deletion only, no forensic-erasure claim`);
 }
-module.exports = { purgeDir, operate, inventory, iterProfiles, requireStopped, main };
+module.exports = { purgeDir, operate, inventory, iterProfiles, requireStopped, browserRoots, pythonCommand, main };
 if (require.main === module) {
   main().catch(error => {
     // Do not print database keys, values or captured subprocess stdout/stderr.

@@ -48,3 +48,11 @@ jobs:
       - name: Native read-only smoke (Windows)
         if: runner.os == 'Windows'
         run: python tools/smoke.py
+      - name: Native browser previews on the runner's own profiles (Windows)
+        if: runner.os == 'Windows'
+        # Read-only: scans and previews work on snapshot copies. 0 = no hits,
+        # 1 = hits (scan only); anything else fails the job.
+        run: |
+          python scripts/browser_scan.py || [ $? -eq 1 ]
+          python scripts/chrome_purge.py
+          node scripts/ls_purge.js
