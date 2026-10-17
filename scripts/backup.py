@@ -81,7 +81,7 @@ def copy_strict(source, target, reserved=False):
             placeholder = target.lstat()
             if not stat.S_ISREG(placeholder.st_mode) or common.reparse_point(placeholder) or placeholder.st_size:
                 raise ValueError(f'恢复占位文件不是空文件，停止: {target}')
-        with source.open('rb') as reader, target.open('wb' if reserved else 'xb') as writer:
+        with source.open('rb') as reader, (target.open('wb') if reserved else target.open('xb')) as writer:
             shutil.copyfileobj(reader, writer, 1024 * 1024)
         shutil.copystat(source, target)
     else:
