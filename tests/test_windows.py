@@ -5,13 +5,16 @@ the windows-latest CI job; these tests pin the portable rules.
 """
 import contextlib
 import io
+import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from test_workflows import BS, platforms, verify
+from test_workflows import BS, common, platforms, verify
 import winplat
 
 WIN = platforms.WINDOWS
@@ -204,6 +207,69 @@ class WindowsRegistryTests(unittest.TestCase):
     def test_environment_names_enumerated_by_count(self):
         with patch.object(winplat, '_winreg', return_value=FakeRegistry(names=['Path', 'ANTHROPIC_API_KEY'])):
             self.assertEqual(winplat.user_environment_names(), ['Path', 'ANTHROPIC_API_KEY'])
+
+
+def process(name, path='', command=''):
+    return {'Name': name, 'ExecutablePath': path, 'CommandLine': command}
+
+
+class WindowsProcessTests(unittest.TestCase):
+    def setUp(self):
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        stack.enter_context(patch.object(platforms, 'current', return_value=WIN))
+        stack.enter_context(patch.dict(os.environ, {'SystemRoot': 'C:/Windows'}))
+
+    def records(self, output):
+        with patch.object(common, 'run', return_value=output) as run:
+            records = common.process_list()
+        args = run.call_args.args[0]
+        self.assertTrue(args[0].endswith('WindowsPowerShell/v1.0/powershell.exe'))
+        self.assertIn('-NoProfile', args)
+        return records
+
+    def test_matches_desktop_cli_node_editors_and_browsers(self):
+        procs = self.records(json.dumps([
+            process('Claude.exe', r'C:\Program Files\WindowsApps\Claude_1.0_x64__pzs8sxrjxfjjc\app\Claude.exe'),
+            process('claude.exe', r'C:\Users\u\.local\bin\claude.exe', 'claude --resume'),
+            process('node.exe', r'C:\nodejs\node.exe', r'node C:\Users\u\AppData\Roaming\npm\node_modules\@anthropic-ai\claude-code\cli.js'),
+            process('node.exe', r'C:\nodejs\node.exe', r'node C:\work\server.js'),
+            process('Code.exe'), process('CHROME.EXE'), process('msedge.exe'),
+            process('svchost.exe'), process('claude-notes.exe'), process('System Idle Process', None, None),
+        ]))
+        self.assertEqual(len(common.relevant_processes(procs)), 6)
+        self.assertEqual(len(common.relevant_processes(procs, True)), 2)
+        self.assertEqual(sum(WIN.is_claude_process(p) for p in procs), 3)
+
+    def test_single_object_output_is_accepted(self):
+        self.assertEqual(self.records(json.dumps(process('chrome.exe'))), [('chrome.exe', '', '')])
+
+    def test_invalid_or_empty_output_is_an_error_without_echoing_it(self):
+        for output in ('not json SECRET', '[]', '"text"', json.dumps([{'ExecutablePath': 'x'}])):
+            with self.subTest(output=output), self.assertRaises(RuntimeError) as caught:
+                self.records(output)
+            self.assertNotIn('SECRET', str(caught.exception))
+
+    def test_powershell_failure_propagates(self):
+        with patch.object(common, 'run', side_effect=subprocess.CalledProcessError(1, ['powershell'])):
+            with self.assertRaises(subprocess.CalledProcessError):
+                common.require_stopped()
+
+    def test_missing_systemroot_is_an_error(self):
+        with patch.dict(os.environ, {}, clear=True), self.assertRaisesRegex(RuntimeError, 'SystemRoot'):
+            common.process_list()
+
+    def test_running_browser_blocks_writes(self):
+        with patch.object(common, 'run', return_value=json.dumps([process('brave.exe')])):
+            with self.assertRaisesRegex(RuntimeError, '仍在运行'):
+                common.require_stopped(browsers_only=True)
+
+
+@unittest.skipUnless(sys.platform == 'win32', 'native Windows process query')
+class NativeWindowsProcessTests(unittest.TestCase):
+    def test_real_query_includes_this_python_process(self):
+        names = [name.lower() for name, _, _ in common.process_list()]
+        self.assertIn(Path(sys.executable).name.lower(), names)
 
 
 if __name__ == '__main__':

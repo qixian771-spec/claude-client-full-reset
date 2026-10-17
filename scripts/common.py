@@ -22,7 +22,8 @@ def require_supported():
 
 
 def run(args):
-    return subprocess.run(args, capture_output=True, text=True, check=True, timeout=60).stdout
+    return subprocess.run(args, capture_output=True, text=True, encoding='utf-8',
+                          check=True, timeout=60).stdout
 
 
 def utf8_stdio():
@@ -80,6 +81,9 @@ def walk_files(root):
 
 
 def process_list():
+    if platforms.current().key == 'win32':
+        import winplat  # deferred: Windows-only module
+        return winplat.process_records()
     return [x.strip() for x in run(['ps', '-eo', 'args=']).splitlines() if x.strip()]
 
 

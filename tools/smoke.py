@@ -26,7 +26,13 @@ def paths():
     print('[paths] read-only findings: ' + ', '.join(f'{k}={len(v)}' for k, v in findings.items()))
 
 
-STAGES = {'paths': paths}
+def processes():
+    records = common.process_list()
+    print(f'[processes] total={len(records)}; relevant={len(common.relevant_processes(records))}; '
+          f'browsers={len(common.relevant_processes(records, True))}')
+
+
+STAGES = {'paths': paths, 'processes': processes}
 
 
 def main():
