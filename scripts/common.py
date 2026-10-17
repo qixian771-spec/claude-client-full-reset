@@ -51,18 +51,30 @@ def exists(path):
         return False
 
 
+def reparse_point(info):
+    # POSIX has no reparse points. On Windows, junctions, mount points and
+    # cloud placeholders carry this attribute without being S_ISLNK.
+    return bool(getattr(info, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def is_link(path):
+    """Symlink, junction or other reparse point; a missing path raises."""
+    info = Path(path).lstat()
+    return stat.S_ISLNK(info.st_mode) or reparse_point(info)
+
+
 def directory(path):
     path = Path(path)
     if not exists(path):
         return False
-    if path.is_symlink() or not stat.S_ISDIR(path.stat().st_mode):
+    if is_link(path) or not stat.S_ISDIR(path.stat().st_mode):
         raise ValueError(f'不是可扫描的普通目录: {path}')
     return True
 
 
 def regular(path):
     info = Path(path).lstat()
-    if not stat.S_ISREG(info.st_mode):
+    if not stat.S_ISREG(info.st_mode) or reparse_point(info):
         raise ValueError(f'不支持的文件类型或符号链接: {path}')
 
 

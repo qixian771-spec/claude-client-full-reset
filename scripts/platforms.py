@@ -19,7 +19,7 @@ import sys
 
 CLI_PROCESS = re.compile(r'(?:^|/)claude(?:\s|$)', re.I)
 CLI_PACKAGE = '/@anthropic-ai/claude-code/'
-VARIABLE = re.compile(r'^%([A-Z_]+)%/(.*)$')
+VARIABLE = re.compile(r'^%([A-Z_]+)%(?:/(.*))?$')
 
 
 @dataclass(frozen=True)
@@ -64,7 +64,7 @@ class Platform:
             return home / entry[2:]
         match = VARIABLE.match(entry)
         if match:
-            return self.variable_dir(match.group(1)) / match.group(2)
+            return self.variable_dir(match.group(1)) / (match.group(2) or '')
         return Path(entry)
 
     def variable_dir(self, name):
@@ -130,6 +130,9 @@ class Platform:
         """Environment variable names stored outside shell files (none on macOS)."""
         return []
 
+    def check_path_form(self, path):
+        """Reject path forms the tools do not support (POSIX absolute paths are fine)."""
+
     def is_claude_process(self, proc):
         return ('/Claude.app/' in proc or Path(proc).name.startswith('Claude Helper')
                 or self.is_cli_process(proc))
@@ -143,11 +146,17 @@ class WindowsPlatform(Platform):
         if name == 'DOCUMENTS':
             import winplat  # deferred: only Windows reads the registry
             return winplat.documents_dir()
-        return super().variable_dir(name)
+        # Long names: variables may hold 8.3 short paths (e.g. RUNNER~1).
+        return super().variable_dir(name).resolve()
 
     def persistent_env_names(self):
         import winplat
         return winplat.user_environment_names()
+
+    def check_path_form(self, path):
+        # Only local drive-letter paths: no UNC shares, no \\?\ device paths.
+        if not re.fullmatch(r'[A-Za-z]:', path.drive):
+            raise ValueError(f'只支持本地盘符绝对路径（不支持 UNC、\\\\?\\ 或网络路径）: {path}')
 
     def match_process(self, proc, names):
         return proc[0].lower() in {name.lower() for name in names}

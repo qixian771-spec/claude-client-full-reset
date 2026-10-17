@@ -7,14 +7,15 @@ import contextlib
 import io
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+import stat
 import subprocess
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from test_workflows import BS, common, platforms, verify
+from test_workflows import BS, backup, common, platforms, trash, verify
 import winplat
 
 WIN = platforms.WINDOWS
@@ -209,6 +210,118 @@ class WindowsRegistryTests(unittest.TestCase):
     def test_environment_names_enumerated_by_count(self):
         with patch.object(winplat, '_winreg', return_value=FakeRegistry(names=['Path', 'ANTHROPIC_API_KEY'])):
             self.assertEqual(winplat.user_environment_names(), ['Path', 'ANTHROPIC_API_KEY'])
+
+
+class FakeStat:
+    def __init__(self, mode, attributes):
+        self.st_mode = mode
+        self.st_file_attributes = attributes
+        self.st_size = 0
+
+
+class WindowsPathFormTests(unittest.TestCase):
+    def test_path_forms(self):
+        for good in ('C:/Users/u/.claude', r'd:\data\x'):
+            WIN.check_path_form(PureWindowsPath(good))
+        for bad in (r'\\server\share\x', r'\\?\C:\Users\u', r'\\.\PhysicalDrive0', '/no/drive'):
+            with self.subTest(path=bad), self.assertRaises(ValueError):
+                WIN.check_path_form(PureWindowsPath(bad))
+
+    def test_bare_variable_entries_resolve_to_the_folder(self):
+        with patch.dict(os.environ, {'APPDATA': str(PROFILE / 'Roaming')}):
+            self.assertEqual(WIN.resolve('%APPDATA%'), (PROFILE / 'Roaming').resolve())
+
+
+class WindowsPathSafetyTests(WindowsFixture):
+    def setUp(self):
+        super().setUp()
+        # Fixture paths are POSIX on non-Windows hosts; the drive-letter rule
+        # is tested separately with PureWindowsPath.
+        context = patch.object(platforms.WindowsPlatform, 'check_path_form', lambda self, path: None)
+        context.start()
+        self.addCleanup(context.stop)
+
+    def test_containers_and_user_folders_are_refused(self):
+        data = self.msix()
+        package = data.parents[2]
+        self.file(self.local / 'Packages/Other_x/LocalCache/Roaming/Claude/a')
+        for path in (self.home / 'AppData', self.local, self.roaming, self.local / 'Packages', package,
+                     package / 'LocalCache', package / 'LocalCache/Roaming', self.documents,
+                     self.local / 'Packages/Other_x/LocalCache/Roaming/Claude', self.home / '.local/share'):
+            path.mkdir(parents=True, exist_ok=True)
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                trash.validate_path(str(path))
+
+    def test_ssh_tree_refused(self):
+        key = self.file(self.home / '.ssh/id_ed25519')
+        with self.assertRaisesRegex(ValueError, '危险'):
+            trash.validate_path(str(key))
+
+    def test_msix_claude_data_and_regular_client_data_allowed(self):
+        data = self.msix()
+        third = self.file(data.parent / 'Claude-3p/x').parent
+        for path in (data, data / 'config.json', third, self.file(self.roaming / 'Claude/a').parent,
+                     self.file(self.local / 'CrashDumps/claude.exe.1.dmp')):
+            self.assertEqual(trash.validate_path(str(path)), path)
+
+    def test_outside_home_refused(self):
+        outside = Path(self.temp.name).resolve() / 'elsewhere'
+        outside.mkdir()
+        with self.assertRaisesRegex(ValueError, '范围'):
+            trash.validate_path(str(outside))
+
+    def test_reparse_point_directory_is_a_link(self):
+        junction = FakeStat(stat.S_IFDIR | 0o755, stat.FILE_ATTRIBUTE_REPARSE_POINT)
+        with patch.object(Path, 'lstat', return_value=junction):
+            self.assertTrue(common.is_link(self.home))
+            with self.assertRaises(ValueError):
+                backup.fingerprint(self.home)
+        with patch.object(Path, 'lstat', return_value=junction), patch.object(Path, 'stat', return_value=junction):
+            with self.assertRaises(ValueError):
+                common.directory(self.home)
+
+    def test_reparse_point_file_is_not_regular(self):
+        placeholder = FakeStat(stat.S_IFREG | 0o644, stat.FILE_ATTRIBUTE_REPARSE_POINT)
+        with patch.object(Path, 'lstat', return_value=placeholder):
+            with self.assertRaises(ValueError):
+                common.regular(self.home / 'file')
+
+    def test_plain_attributes_are_not_links(self):
+        with patch.object(Path, 'lstat', return_value=FakeStat(stat.S_IFDIR | 0o755, 0x10)):
+            self.assertFalse(common.is_link(self.home))
+
+
+@unittest.skipUnless(sys.platform == 'win32', 'native Windows junctions and drive paths')
+class NativeWindowsPathTests(WindowsFixture):
+    def junction(self):
+        target = self.home / 'target'
+        target.mkdir()
+        link = self.home / 'junction'
+        subprocess.run(['cmd', '/c', 'mklink', '/J', str(link), str(target)], check=True, capture_output=True)
+        self.assertFalse(link.is_symlink(), 'is_symlink() does not see junctions; is_link must')
+        return link
+
+    def test_junction_is_refused_everywhere(self):
+        link = self.junction()
+        self.assertTrue(common.is_link(link))
+        with self.assertRaises(ValueError):
+            common.directory(link)
+        with self.assertRaises(ValueError):
+            backup.fingerprint(link)
+        with self.assertRaisesRegex(ValueError, 'junction'):
+            trash.validate_path(str(link))
+        inside = link / 'x'
+        with self.assertRaisesRegex(ValueError, 'junction'):
+            trash.validate_path(str(inside), must_exist=False)
+
+    def test_unc_and_device_paths_refused(self):
+        for raw in (r'\\localhost\c$\Users', '\\\\?\\' + str(self.home)):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                backup.absolute_path(raw)
+
+    def test_case_variant_of_protected_folder_refused(self):
+        with self.assertRaisesRegex(ValueError, '危险'):
+            trash.validate_path(str(self.home / 'APPDATA' / 'local'))
 
 
 def process(name, path='', command=''):

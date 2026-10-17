@@ -13,18 +13,24 @@ def validate_path(raw, must_exist=True):
         raise ValueError('路径包含控制字符')
     path = backup.absolute_path(raw)
     backup.no_symlink_parents(path)
-    if path.is_symlink():
-        raise ValueError('不支持移动符号链接（包括断链）；请单独检查')
+    if common.exists(path) and common.is_link(path):
+        raise ValueError('不支持移动符号链接、junction 或其他重解析点（包括断链）；请单独检查')
     platform = platforms.current()
     home = Path.home().resolve()
     protected = {home, *home.parents}
     protected.update(platform.resolve_all(platform.protected, home))
-    if path in protected or any(p in path.parents for p in (home / '.Trash', home / '.ssh')):
+    if path in protected or any(p in path.parents for p in platform.resolve_all(platform.protected_trees, home)):
         raise ValueError(f'拒绝危险路径: {path}')
+    for container, entries in platform.confined:
+        if platform.resolve(container, home) in path.parents:
+            permitted = platform.expand_all(entries, home)
+            if not any(path == item or item in path.parents for item in permitted):
+                raise ValueError(f'此容器内只允许处理 Claude 数据目录: {path}')
     allowed = home in path.parents or path in platform.resolve_all(platform.trash_allowed, home)
-    diagnostic = platform.resolve(platform.trash_diagnostic_dir, home)
-    if path.parent == diagnostic and path.name.lower().startswith(('claude', 'anthropic')):
-        allowed = True
+    if platform.trash_diagnostic_dir is not None:
+        diagnostic = platform.resolve(platform.trash_diagnostic_dir, home)
+        if path.parent == diagnostic and path.name.lower().startswith(('claude', 'anthropic')):
+            allowed = True
     if not allowed:
         raise ValueError(f'目标不在支持的清理范围: {path}')
     if must_exist and not common.exists(path):

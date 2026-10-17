@@ -10,12 +10,15 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 import common
+import platforms
 
 def fingerprint(path):
     path = Path(path)
     info = path.lstat()
     if stat.S_ISLNK(info.st_mode):
         return {'type': 'link', 'target': os.readlink(path)}
+    if common.reparse_point(info):
+        raise ValueError(f'备份不支持 junction 或其他重解析点: {path}')
     if stat.S_ISDIR(info.st_mode):
         return {'type': 'dir'}
     if not stat.S_ISREG(info.st_mode):
@@ -41,15 +44,16 @@ def absolute_path(value):
     path = Path(value)
     if not path.is_absolute() or '..' in path.parts:
         raise ValueError('必须使用不含 .. 的绝对路径')
+    platforms.current().check_path_form(path)
     return path
 
 
 def no_symlink_parents(path):
     for parent in Path(path).parents:
-        if parent.is_symlink():
+        if common.exists(parent) and common.is_link(parent):
             # macOS /var and /tmp are system aliases. Resolve before calling this
             # function; arbitrary user-created links remain visible at CLI input.
-            raise ValueError(f'父目录是符号链接: {parent}')
+            raise ValueError(f'父目录是符号链接或 junction: {parent}')
 
 
 def create_backup(dest, extra=()):

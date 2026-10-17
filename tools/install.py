@@ -5,6 +5,7 @@ import io
 import os
 from pathlib import Path
 import shutil
+import stat
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,8 +18,9 @@ def install(target):
     if not target.is_absolute() or '..' in target.parts:
         raise ValueError('安装目标必须是无 .. 的绝对路径')
     for parent in (target, *target.parents):
-        if parent.is_symlink():
-            raise ValueError(f'安装路径不能包含符号链接: {parent}')
+        if parent.is_symlink() or (parent.exists() and getattr(os.lstat(parent), 'st_file_attributes', 0)
+                                   & stat.FILE_ATTRIBUTE_REPARSE_POINT):
+            raise ValueError(f'安装路径不能包含符号链接或 junction: {parent}')
     if target.exists():
         raise FileExistsError(f'目标已存在，拒绝覆盖: {target}')
     for name in CONTENTS:

@@ -87,7 +87,7 @@ def iter_profiles(root):
     if not common.directory(root):
         return
     for child in sorted(Path(root).iterdir()):
-        if child.is_symlink():
+        if common.is_link(child):
             raise ValueError(f'浏览器根目录存在符号链接，无法完整扫描: {child}')
         if child.is_dir() and (child.name == 'Default' or child.name.startswith('Profile ') or
                               any(common.exists(child / name) for name in ('Preferences', 'Cookies', 'History', 'Network'))):

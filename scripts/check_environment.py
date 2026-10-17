@@ -57,7 +57,7 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
     desktop = []
     for path in map(Path, app_paths):
         if common.exists(path):
-            if path.is_symlink():
+            if common.is_link(path):
                 issues.append({'path': str(path), 'reason': '应用路径为符号链接，需核对实际安装'})
             elif stat.S_ISDIR(path.stat().st_mode):
                 desktop.append(str(path))
@@ -81,7 +81,7 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
     for path in candidates:
         if common.exists(path):
             local.append(str(path))
-            if path.is_symlink():
+            if common.is_link(path):
                 issues.append({'path': str(path), 'reason': '数据/配置路径为符号链接，不能据此安排自动清理'})
     # Installing this skill alone must not count as prior Claude use.
     skill_present = common.exists(home / '.claude/skills/claude-client-full-reset/SKILL.md')
