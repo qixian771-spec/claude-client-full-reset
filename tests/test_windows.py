@@ -488,22 +488,31 @@ class WindowsRecycleTests(WindowsFixture):
 class NativeWindowsRecycleTests(unittest.TestCase):
     def test_disposable_file_and_folder_go_to_recycle_bin(self):
         with tempfile.TemporaryDirectory(prefix='reset-recycle-') as temp:
-            folder = Path(temp).resolve() / 'claude-fixture'
+            base = Path(temp).resolve()
+            folder = base / 'claude-fixture-folder'
             (folder / 'nested').mkdir(parents=True)
             (folder / 'nested/a.txt').write_text('a', encoding='utf-8')
-            single = Path(temp).resolve() / 'claude-file.txt'
+            # No extension: the Recycle Bin display name hides known extensions.
+            single = base / 'claude-fixture-file'
             single.write_text('b', encoding='utf-8')
             winplat.recycle(single)
             winplat.recycle(folder)
             self.assertFalse(single.exists())
             self.assertFalse(folder.exists())
-            listing = subprocess.run(
-                [winplat.powershell(), '-NoProfile', '-NonInteractive', '-Command',
-                 '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; '
-                 '(New-Object -ComObject Shell.Application).NameSpace(10).Items() | ForEach-Object { $_.Name }'],
-                capture_output=True, text=True, encoding='utf-8', check=True, timeout=60).stdout.splitlines()
-            self.assertIn('claude-file.txt', listing, 'file must be in the Recycle Bin, not deleted')
-            self.assertIn('claude-fixture', listing, 'folder must be in the Recycle Bin, not deleted')
+            # Columns of the Recycle Bin folder: 0 = name, 1 = original location.
+            script = ('[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; '
+                      '$bin = (New-Object -ComObject Shell.Application).NameSpace(10); '
+                      '$bin.Items() | ForEach-Object { $bin.GetDetailsOf($_, 0) + "|" + $bin.GetDetailsOf($_, 1) }')
+            listing = subprocess.run([winplat.powershell(), '-NoProfile', '-NonInteractive', '-Command', script],
+                                     capture_output=True, text=True, encoding='utf-8', check=True,
+                                     timeout=60).stdout.splitlines()
+            entries = {tuple(line.rsplit('|', 1)) for line in listing if '|' in line}
+            for name in (single.name, folder.name):
+                with self.subTest(name=name):
+                    locations = [Path(where) for shown, where in entries if shown == name]
+                    self.assertTrue(locations, f'{name} must be in the Recycle Bin, not deleted: {sorted(entries)}')
+                    self.assertTrue(any(where.samefile(base) for where in locations if where.exists()),
+                                    f'original location must be {base}: {locations}')
 
 
 class WindowsEnvironmentTests(WindowsFixture):
