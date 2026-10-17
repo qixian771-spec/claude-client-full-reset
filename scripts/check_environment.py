@@ -36,7 +36,8 @@ def executable_info(path, platform=None):
 def command_paths(name, search_path, platform=None):
     platform = platforms.current() if platform is None else platform
     found = []
-    for part in search_path.split(platform.path_separator):
+    # PATH syntax belongs to the host OS, not to the platform table.
+    for part in search_path.split(os.pathsep):
         directory = Path(part) if part else Path.cwd()
         # Stat explicitly: unreadable PATH locations must not become "missing".
         if not common.exists(directory):

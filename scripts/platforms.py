@@ -133,8 +133,6 @@ class Platform:
     def check_path_form(self, path):
         """Reject path forms the tools do not support (POSIX absolute paths are fine)."""
 
-    path_separator = ':'
-
     def executable_names(self, name):
         return [name]
 
@@ -164,8 +162,6 @@ class WindowsPlatform(Platform):
     def persistent_env_names(self):
         import winplat
         return winplat.user_environment_names()
-
-    path_separator = ';'
 
     def pathext(self):
         if 'PATHEXT' not in os.environ:

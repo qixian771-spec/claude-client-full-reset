@@ -533,7 +533,8 @@ class WindowsEnvironmentTests(WindowsFixture):
     def test_pathext_finds_cmd_and_ignores_extensionless_file(self):
         self.file(self.bin / 'claude', 'not runnable on Windows')
         self.assertEqual(env.command_paths('claude', str(self.bin), WIN), [])
-        shim = self.file(self.bin / 'claude.CMD')
+        # File-name case folding is the file system's job; use the PATHEXT spelling.
+        shim = self.file(self.bin / 'claude.cmd')
         found = env.command_paths('claude', str(self.bin), WIN)
         self.assertEqual([(Path(item['path']).name, item['usable_path']) for item in found], [('claude.cmd', True)])
         self.assertTrue(Path(found[0]['path']).samefile(shim))
