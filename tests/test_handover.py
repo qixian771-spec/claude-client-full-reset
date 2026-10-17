@@ -119,8 +119,8 @@ class RunnerTests(unittest.TestCase):
         fake = FakeScripts()
         code, calls, log = self.run_plan(fake)
         self.assertEqual(code, 0)
-        self.assertEqual(calls, ['preflight.py --dest', 'backup.py --dest', 'backup.py --verify',
-                                 'trash_paths.py --dry-run', 'trash_paths.py --apply', 'scan_readonly.py --no-browser'])
+        self.assertEqual(calls, ['preflight.py --dest', 'trash_paths.py --dry-run', 'backup.py --dest',
+                                 'backup.py --verify', 'trash_paths.py --apply', 'scan_readonly.py --no-browser'])
         apply_args = next(rest for script, rest in fake.calls if script == 'trash_paths.py' and rest[0] == '--apply')
         self.assertEqual(apply_args, ['--apply', '--backup', '/backups/Claude-Reset-Backup-x',
                                       '/Users/u/.claude/history.jsonl'])
@@ -133,13 +133,13 @@ class RunnerTests(unittest.TestCase):
                 fake = FakeScripts()
                 code, calls, log = self.run_plan(fake, reply)
                 self.assertEqual(code, 3)
-                self.assertNotIn('trash_paths.py --apply', calls)
+                self.assertEqual(calls, ['preflight.py --dest', 'trash_paths.py --dry-run'])  # nothing written
                 self.assertIn('[已取消]', log)
 
     def test_failed_step_stops_everything_after_it(self):
         for failing, last in ((('preflight.py', ['--dest']), 'preflight.py --dest'),
-                              (('backup.py', ['--verify']), 'backup.py --verify'),
-                              (('trash_paths.py', ['--dry-run']), 'trash_paths.py --dry-run')):
+                              (('trash_paths.py', ['--dry-run']), 'trash_paths.py --dry-run'),
+                              (('backup.py', ['--verify']), 'backup.py --verify')):
             with self.subTest(step=failing):
                 fake = FakeScripts(fail=(failing[0], failing[1]))
                 code, calls, log = self.run_plan(fake)
@@ -147,6 +147,19 @@ class RunnerTests(unittest.TestCase):
                 self.assertEqual(calls[-1], last)
                 self.assertNotIn('trash_paths.py --apply', calls)
                 self.assertIn('[ERROR] RuntimeError: boom', log)
+
+    def test_failure_after_backup_prints_the_restore_entry(self):
+        plan_path = Path(self.temp.name) / 'plan.json'
+        plan_path.write_text(json.dumps(self.plan), encoding='utf-8')
+        fake = FakeScripts(fail=('trash_paths.py', ['--apply']))
+        with patch.object(sys, 'argv', ['handover_run', '--plan', str(plan_path)]), \
+                patch.object(handover_run.subprocess, 'run', side_effect=fake), \
+                patch('builtins.input', return_value='是'), contextlib.redirect_stdout(io.StringIO()):
+            code = handover_run.main()
+        log = plan_path.with_suffix('.log').read_text(encoding='utf-8')
+        self.assertEqual(code, 2)
+        self.assertIn('[停止] 第 5 步', log)
+        self.assertIn('--restore "/backups/Claude-Reset-Backup-x"', log)
 
     def test_plan_validation(self):
         path = Path(self.temp.name) / 'plan.json'
@@ -194,8 +207,33 @@ class NativeWindowsHandoverTests(unittest.TestCase):
         self.assertTrue((self.home / '.claude/settings.json').exists())
         self.assertIn('退出码 0', log)
 
-    def test_cancelled_hand_over_moves_nothing(self):
+    def test_cancelled_hand_over_writes_nothing(self):
         code, log = self.run_launcher(self.generate(), 'no')
         self.assertIn('[已取消]', log, log)
         self.assertTrue(self.target.exists())
+        self.assertEqual(list(self.home.glob('Claude-Reset-Backup-*')), [])
         self.assertIn('退出码 3', log)
+
+
+@unittest.skipUnless(sys.platform == 'darwin', 'native macOS launcher with an awkward home path')
+class NativeMacHandoverTests(unittest.TestCase):
+    def test_cancel_branch_runs_through_the_generated_command_file(self):
+        with tempfile.TemporaryDirectory(prefix='reset-handover-') as temp:
+            home = Path(temp).resolve() / "用户 'home' $X"
+            (home / '.claude').mkdir(parents=True)
+            target = home / '.claude/history.jsonl'
+            target.write_text('历史', encoding='utf-8')
+            env = dict(os.environ, HOME=str(home))
+            made = subprocess.run([sys.executable, str(ROOT / 'scripts/handover.py'), '--target', str(target),
+                                   '--out-dir', str(home)], capture_output=True, text=True, env=env, check=True)
+            launch = next(Path(line.split(': ', 1)[1]) for line in made.stdout.splitlines() if '双击运行' in line)
+            subprocess.run(['bash', str(launch)], input='no\n\n', capture_output=True, text=True, env=env, timeout=300)
+            log = launch.with_suffix('.log').read_text(encoding='utf-8')
+            self.assertIn('第 1 步：前提自检', log, log)  # the launcher ran despite the awkward path
+            if '[已取消]' not in log:
+                # On a developer machine the AI host itself is running; that is
+                # the only acceptable reason to stop before the question.
+                self.assertIn('相关应用仍在运行', log, log)
+                self.assertIn('退出码 2', log, log)
+            self.assertTrue(target.exists())
+            self.assertEqual(list(home.glob('Claude-Reset-Backup-*')), [])

@@ -32,7 +32,7 @@ license: MIT
 | 首次使用、是否安装、依赖缺口 | `python3 scripts/check_environment.py --json`；必要时 A | [环境检测与配置](references/environment-check.md)、[首次准备](references/first-run.md) |
 | 只检查残留 | B；浏览器扫描要求浏览器关闭 | [覆盖矩阵](references/coverage-matrix.md) |
 | 写入前确认是否具备条件 | `python3 scripts/preflight.py`（只读，0 = 可以开始） | [执行手册](references/agent-runbook.md) |
-| 已授权的具体文件/目录清理 | C：生成交接文件 `scripts/handover.py`，用户双击运行（前提自检 → 备份校验 → 预览 → 确认 → 执行 → 验收） | [执行手册 C1](references/agent-runbook.md#c1-交接独立终端)、[恢复说明](references/restore-and-rebuild.md) |
+| 已授权的具体文件/目录清理 | C：生成交接文件 `scripts/handover.py`，用户双击运行（前提自检 → 预览 → 确认 → 备份校验 → 执行 → 验收） | [执行手册 C1](references/agent-runbook.md#c1-交接独立终端)、[恢复说明](references/restore-and-rebuild.md) |
 | SQLite/LevelDB 记录精删 | C4，明确浏览器与 profile 选择器 | [浏览器规则](references/browser-layer.md) |
 | 恢复文件/目录 | D，优先选择明确 `--path`，先 `--dry-run` | [恢复说明](references/restore-and-rebuild.md) |
 | 错误、权限或部分完成 | 停止写入并保留证据 | [常见故障](references/pitfalls.md) |

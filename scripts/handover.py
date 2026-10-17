@@ -5,7 +5,7 @@ The AI host itself must quit before any write, so it prepares this instead:
 a JSON plan with exactly the confirmed targets plus a launcher the user
 double-clicks in a standalone terminal (macOS .command, Windows .cmd). The
 launcher runs scripts/handover_run.py, which stops at the first failure and
-asks the user to type 是 before moving anything. Generating writes only the
+asks the user to type 是 before writing anything. Generating writes only the
 two new files; existing files are never overwritten.
 """
 import argparse
@@ -112,7 +112,7 @@ def main():
     print('  计划: ' + str(plan_path))
     print('  双击运行: ' + str(launch_path))
     print('  日志（运行后生成）: ' + str(plan_path.with_suffix('.log')))
-    print('步骤：前提自检 → 备份 → 校验 → 预览 → 输入“是”确认 → 移入废纸篓/回收站 → 验收；任何一步失败即停止。')
+    print('步骤：前提自检 → 预览 → 输入“是”确认 → 备份 → 校验 → 移入废纸篓/回收站 → 验收；不确认就什么都不写，任何一步失败即停止。')
     return 0
 
 
