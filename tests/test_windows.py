@@ -8,6 +8,7 @@ import io
 import json
 import os
 from pathlib import Path, PureWindowsPath
+import shutil
 import stat
 import subprocess
 import sys
@@ -44,6 +45,10 @@ class WindowsFixture(unittest.TestCase):
         stack.enter_context(patch.object(platforms, 'current', return_value=WIN))
         stack.enter_context(patch.object(winplat, 'documents_dir', side_effect=lambda: self.documents))
         stack.enter_context(patch.object(winplat, 'user_environment_names', side_effect=lambda: self.user_env))
+        if sys.platform != 'win32':
+            # Fixture paths are POSIX here; the drive-letter rule is covered by
+            # WindowsPathFormTests and runs for real on Windows.
+            stack.enter_context(patch.object(platforms.WindowsPlatform, 'check_path_form', lambda self, path: None))
 
     def file(self, path, text='data'):
         path = Path(path)
@@ -233,14 +238,6 @@ class WindowsPathFormTests(unittest.TestCase):
 
 
 class WindowsPathSafetyTests(WindowsFixture):
-    def setUp(self):
-        super().setUp()
-        # Fixture paths are POSIX on non-Windows hosts; the drive-letter rule
-        # is tested separately with PureWindowsPath.
-        context = patch.object(platforms.WindowsPlatform, 'check_path_form', lambda self, path: None)
-        context.start()
-        self.addCleanup(context.stop)
-
     def test_containers_and_user_folders_are_refused(self):
         data = self.msix()
         package = data.parents[2]
@@ -322,6 +319,102 @@ class NativeWindowsPathTests(WindowsFixture):
     def test_case_variant_of_protected_folder_refused(self):
         with self.assertRaisesRegex(ValueError, '危险'):
             trash.validate_path(str(self.home / 'APPDATA' / 'local'))
+
+
+class WindowsBackupTests(WindowsFixture):
+    def setUp(self):
+        super().setUp()
+        self.dest = self.home.parent / 'backups'
+        self.dest.mkdir()
+        context = patch.object(common, 'process_list', return_value=[])
+        context.start()
+        self.addCleanup(context.stop)
+        context = patch.object(common, 'run', side_effect=AssertionError('Windows must not run ditto or other commands'))
+        context.start()
+        self.addCleanup(context.stop)
+
+    def backup(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            return backup.create_backup(self.dest)
+
+    def test_backup_verify_and_partial_restore_round_trip(self):
+        config = self.file(self.home / '.claude.json', '{"a": 1}')
+        history = self.file(self.home / '.claude/history.jsonl', '中文历史\n')
+        settings = self.file(self.home / '.claude/settings.json', 'keep')
+        data = self.msix()
+        self.file(data / 'nested/deep/file.bin', 'x' * 5000)
+        profile = self.file(self.documents / 'PowerShell/Microsoft.PowerShell_profile.ps1', '$env:A=1')
+        folder = self.backup()
+        manifest = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
+        self.assertEqual(manifest['platform'], 'win32')
+        stored = {entry['stored'] for entry in manifest['sources']}
+        self.assertIn('MSIX-Claude/Claude_pzs8sxrjxfjjc', stored)
+        self.assertIn('shell/PowerShell/Microsoft.PowerShell_profile.ps1', stored)
+        self.assertIn('py -3 scripts\\backup.py', (folder / 'RESTORE.md').read_text(encoding='utf-8'))
+        before = backup.inventory(data)
+        history.unlink()
+        shutil.rmtree(data)
+        with contextlib.redirect_stdout(io.StringIO()):
+            backup.restore(folder, [str(history), str(data)])
+        self.assertEqual(history.read_text(encoding='utf-8'), '中文历史\n')
+        self.assertEqual(backup.inventory(data), before)
+        self.assertEqual(settings.read_text(encoding='utf-8'), 'keep')
+        self.assertEqual(config.read_text(encoding='utf-8'), '{"a": 1}')
+        self.assertTrue(profile.exists())
+
+    def test_link_inside_source_stops_backup_without_manifest(self):
+        self.file(self.roaming / 'Claude/a')
+        (self.roaming / 'Claude/link').symlink_to(self.home)
+        with self.assertRaisesRegex(ValueError, '重解析点|链接'):
+            self.backup()
+        folders = list(self.dest.iterdir())
+        self.assertEqual(len(folders), 1)
+        self.assertFalse((folders[0] / 'manifest.json').exists())
+
+    def test_strict_copy_never_overwrites_or_merges(self):
+        source = self.file(self.home / 'src/a.txt', 'new').parent
+        existing = self.file(self.home / 'dst/a.txt', 'old').parent
+        with self.assertRaises(FileExistsError):
+            backup.copy_strict(source, existing)
+        with self.assertRaisesRegex(ValueError, '占位目录'):
+            backup.copy_strict(source, existing, reserved=True)
+        self.assertEqual((existing / 'a.txt').read_text(encoding='utf-8'), 'old')
+        placeholder = self.file(self.home / 'placeholder.txt', 'not empty')
+        with self.assertRaisesRegex(ValueError, '占位文件'):
+            backup.copy_strict(source / 'a.txt', placeholder, reserved=True)
+        self.assertEqual(placeholder.read_text(encoding='utf-8'), 'not empty')
+
+    def test_restore_refuses_existing_target(self):
+        target = self.file(self.home / '.claude.json', 'original')
+        folder = self.backup()
+        with self.assertRaisesRegex(ValueError, '已存在'):
+            backup.restore(folder, [str(target)])
+        self.assertEqual(target.read_text(encoding='utf-8'), 'original')
+
+    def test_backup_from_other_platform_refused(self):
+        self.file(self.home / '.claude.json')
+        folder = self.backup()
+        with patch.object(platforms, 'current', return_value=platforms.MACOS):
+            with self.assertRaisesRegex(ValueError, '其他平台'):
+                backup.verify_backup(folder)
+
+    def test_manifest_without_platform_is_treated_as_legacy_macos(self):
+        self.file(self.home / '.claude.json')
+        folder = self.backup()
+        manifest = folder / 'manifest.json'
+        data = json.loads(manifest.read_text(encoding='utf-8'))
+        del data['platform']
+        manifest.write_text(json.dumps(data), encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, '其他平台'):
+            backup.verify_backup(folder)
+        with patch.object(platforms, 'current', return_value=platforms.MACOS):
+            self.assertEqual(backup.verify_backup(folder)['version'], 1)
+
+    def test_backup_outside_profile_warns_about_permissions(self):
+        self.file(self.home / '.claude.json')
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.backup()
+        self.assertIn('用户目录之外', err.getvalue())
 
 
 def process(name, path='', command=''):

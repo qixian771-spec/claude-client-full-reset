@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Verified backups: ditto only, SHA-256 manifests, no overwrite on restore."""
+"""Verified backups: ditto on macOS, strict Python copy on Windows, SHA-256 manifests, no overwrite on restore."""
 import argparse
 import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
 import sys
 import tempfile
@@ -56,6 +57,63 @@ def no_symlink_parents(path):
             raise ValueError(f'父目录是符号链接或 junction: {parent}')
 
 
+def copy_strict(source, target, reserved=False):
+    """Windows copy: never follows or creates links, never merges or overwrites.
+
+    reserved=True only for the exact empty placeholder restore() creates.
+    Content is verified afterwards against the SHA-256 inventory.
+    """
+    source, target = Path(source), Path(target)
+    info = source.lstat()
+    if stat.S_ISLNK(info.st_mode) or common.reparse_point(info):
+        raise ValueError(f'Windows 备份不支持符号链接、junction 或其他重解析点: {source}')
+    if stat.S_ISDIR(info.st_mode):
+        if reserved:
+            if common.is_link(target) or not target.is_dir() or any(target.iterdir()):
+                raise ValueError(f'恢复占位目录不是空目录，停止: {target}')
+        else:
+            target.mkdir()
+        for child in sorted(source.iterdir()):
+            copy_strict(child, target / child.name)
+        shutil.copystat(source, target)
+    elif stat.S_ISREG(info.st_mode):
+        if reserved:
+            placeholder = target.lstat()
+            if not stat.S_ISREG(placeholder.st_mode) or common.reparse_point(placeholder) or placeholder.st_size:
+                raise ValueError(f'恢复占位文件不是空文件，停止: {target}')
+        with source.open('rb') as reader, target.open('wb' if reserved else 'xb') as writer:
+            shutil.copyfileobj(reader, writer, 1024 * 1024)
+        shutil.copystat(source, target)
+    else:
+        raise ValueError(f'备份不支持特殊文件: {source}')
+
+
+def copy_entry(source, target, reserved=False):
+    if platforms.current().key == 'darwin':
+        common.run(['ditto', str(source), str(target)])
+    else:
+        copy_strict(source, target, reserved)
+
+
+def restore_instructions(platform):
+    if platform.key == 'win32':
+        command, backup_dir, original, fence = 'py -3 scripts\\backup.py', 'C:\\absolute\\backup-directory', 'C:\\absolute\\original\\target', 'powershell'
+    else:
+        command, backup_dir, original, fence = 'python3 scripts/backup.py', '/absolute/backup-directory', '/absolute/original/target', 'bash'
+    return (
+        '# 备份校验与恢复\n\n在 skill 根目录执行（使用本备份目录的绝对路径）：\n\n'
+        f'```{fence}\n{command} --verify {backup_dir}\n'
+        f'{command} --list {backup_dir}\n'
+        f'{command} --restore {backup_dir} --path {original} --dry-run\n'
+        f'{command} --restore {backup_dir} --path {original}\n```\n\n'
+        '把占位符替换为备份及原目标的绝对路径。--path 可重复，只恢复指定目标或备份内的子路径；'
+        '不指定 --path 才是整包恢复，要求全部原目标都不存在。局部清理后通常应使用 --path。'
+        '恢复前退出相关应用，在独立终端执行。所选目标必须不存在；不会合并或覆盖。'
+        '仍存在的配置、SQLite/LevelDB 数据不要强行覆盖；先另行备份并确认移走具体目标。'
+        '复制失败会保留可能产生的不完整目标并停止，不会自动删除、重试或扩大范围。'
+        'manifest.json 记录完整 SHA-256 内容清单、目录与符号链接；不是签名或防篡改证明。\n')
+
+
 def create_backup(dest, extra=()):
     platform = common.require_supported()
     common.require_stopped()
@@ -80,6 +138,10 @@ def create_backup(dest, extra=()):
             raise ValueError('备份目录不能位于源目录内')
     folder = Path(tempfile.mkdtemp(prefix='Claude-Reset-Backup-', dir=dest))
     os.chmod(folder, 0o700)
+    if platform.key == 'win32' and dest != home and home not in dest.parents:
+        # chmod cannot restrict access on Windows; the user profile's ACL does.
+        print(f'[注意] 备份位于用户目录之外，Windows 不会按 0700 限制访问；请确认该位置只有本人可读: {folder}',
+              file=sys.stderr)
     payload = folder / 'payload'
     payload.mkdir()
     # Incomplete backups never receive manifest.json, and cannot authorize writes.
@@ -88,25 +150,14 @@ def create_backup(dest, extra=()):
         before = inventory(src)
         target = payload / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        common.run(['ditto', str(src), str(target)])
+        copy_entry(src, target)
         if before != inventory(target) or before != inventory(src):
             raise RuntimeError(f'复制或源数据一致性验证失败: {src}；备份不完整: {folder}')
         entries.append({'source': str(src), 'stored': name, 'entries': before})
-    data = {'version': 1, 'created_at': datetime.now(timezone.utc).isoformat(),
+    data = {'version': 1, 'platform': platform.key, 'created_at': datetime.now(timezone.utc).isoformat(),
             'home': str(home), 'sources': entries, 'payload': inventory(payload)}
     (folder / 'manifest.json').write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    (folder / 'RESTORE.md').write_text(
-        '# 备份校验与恢复\n\n在 skill 根目录执行（使用本备份目录的绝对路径）：\n\n'
-        '```bash\npython3 scripts/backup.py --verify /absolute/backup-directory\n'
-        'python3 scripts/backup.py --list /absolute/backup-directory\n'
-        'python3 scripts/backup.py --restore /absolute/backup-directory --path /absolute/original/target --dry-run\n'
-        'python3 scripts/backup.py --restore /absolute/backup-directory --path /absolute/original/target\n```\n\n'
-        '把占位符替换为备份及原目标的绝对路径。--path 可重复，只恢复指定目标或备份内的子路径；'
-        '不指定 --path 才是整包恢复，要求全部原目标都不存在。局部清理后通常应使用 --path。'
-        '恢复前退出相关应用，在独立终端执行。所选目标必须不存在；不会合并或覆盖。'
-        '仍存在的配置、SQLite/LevelDB 数据不要强行覆盖；先另行备份并确认移走具体目标。'
-        '复制失败会保留可能产生的不完整目标并停止，不会自动删除、重试或扩大范围。'
-        'manifest.json 记录完整 SHA-256 内容清单、目录与符号链接；不是签名或防篡改证明。\n', encoding='utf-8')
+    (folder / 'RESTORE.md').write_text(restore_instructions(platform), encoding='utf-8')
     verify_backup(folder)
     print(f'[OK] 备份与源数据一致: {folder}')
     return folder
@@ -117,6 +168,9 @@ def verify_backup(folder):
     data = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
     if data.get('version') != 1 or not data.get('sources'):
         raise ValueError('备份清单缺失或版本无效')
+    # Manifests written before the platform field existed came from macOS only.
+    if data.get('platform', 'darwin') != platforms.current().key:
+        raise ValueError('备份来自其他平台，拒绝作为本次校验或修改依据')
     if data['home'] != str(Path.home().resolve()):
         raise ValueError('备份属于其他家目录，拒绝作为本次修改授权')
     payload = folder / 'payload'
@@ -217,13 +271,13 @@ def restore(folder, paths=None, dry_run=False):
             raise ValueError(f'待恢复副本已变化，停止: {target}')
         target.parent.mkdir(parents=True, exist_ok=True)
         # Reserve the exact destination exclusively; an intervening existing
-        # target must fail instead of being merged or overwritten by ditto.
+        # target must fail instead of being merged or overwritten by the copy.
         if expected['.']['type'] == 'dir':
             target.mkdir(mode=0o700)
         else:
             fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             os.close(fd)
-        common.run(['ditto', str(source), str(target)])
+        copy_entry(source, target, reserved=True)
         if inventory(target) != expected:
             raise RuntimeError(f'恢复内容验证失败: {target}')
         print(f'[OK] 已恢复并验证: {target}')
