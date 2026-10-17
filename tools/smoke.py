@@ -40,7 +40,13 @@ def environment():
           f"missing_base_tools={report['missing_base_tools']}; issues={len(report['issues'])}")
 
 
-STAGES = {'paths': paths, 'processes': processes, 'environment': environment}
+def credentials():
+    platform = common.require_supported()
+    for item in check_environment.credential_locations(platform, Path.home()):
+        print(f"[credentials] {item['location']}: present={item['present']}")
+
+
+STAGES = {'paths': paths, 'processes': processes, 'environment': environment, 'credentials': credentials}
 
 
 def main():

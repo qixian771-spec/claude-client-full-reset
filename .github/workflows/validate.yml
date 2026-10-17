@@ -45,11 +45,11 @@ jobs:
       - run: python tools/check.py
       - run: python -m unittest discover -s tests -v
       - run: node --test tests/level.test.js
-      - name: Native read-only smoke (Windows)
-        if: runner.os == 'Windows'
+      - name: Native read-only smoke (Windows, macOS)
+        if: runner.os != 'Linux'
         run: python tools/smoke.py
-      - name: Native browser previews on the runner's own profiles (Windows)
-        if: runner.os == 'Windows'
+      - name: Native browser previews on the runner's own profiles (Windows, macOS)
+        if: runner.os != 'Linux'
         # Read-only: scans and previews work on snapshot copies. 0 = no hits,
         # 1 = hits (scan only); anything else fails the job.
         run: |
