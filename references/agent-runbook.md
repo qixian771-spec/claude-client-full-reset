@@ -111,6 +111,16 @@ python3 scripts/check_environment.py --json
 
 由用户保存工作、正常退出相关应用（Windows 还包括托盘里的 Claude 和后台常驻的 Edge，见 [首次准备](first-run.md#52-退出相关应用)）。若用户仍要使用它们，状态为“等待退出前提”，不自动结束进程或绕过保护。应用关闭前可完成说明和清单，不能提前写入。
 
+### C1.5 前提自检
+
+在独立终端先运行只读自检，带上本次计划用的参数：
+
+```bash
+python3 scripts/preflight.py --dest /absolute/existing/backup-parent --include /absolute/extra/target
+```
+
+只做浏览器只读扫描时用 `--browsers-only`；要做 LevelDB 精删时加 `--leveldb`；需要机器可读时加 `--json`。逐项列出 ✅/❌/⚠️ 和“下一步”：要退出的应用、受保护位置权限、备份位置与空间（含默认备份大小估算）、`CLAUDE_CONFIG_DIR`、依赖。退出 0 才进入 C2；1 时把各项“下一步”转述给用户，处理后重跑自检；2 表示某项检查本身失败，按报错停止。自检只读，不能代替后续每个命令自己的检查。
+
 ### C2. 创建一次覆盖本批目标的备份
 
 - 只处理默认客户端清单：`bash scripts/backup.sh`。
@@ -196,6 +206,7 @@ SQL/LevelDB 预览退出 0 只表示预览成功，是否有匹配需读输出�
 | 入口 | 0 | 1 | 2/其他异常 |
 | --- | --- | --- | --- |
 | `check_environment.py` | 检测完成且无基础准备问题；可仍有安装/数据 | 异常或基础依赖待处理 | 检测失败，不能得出未安装结论 |
+| `preflight.py` | 全部前提已满足，可以开始写入 | 有未满足项，按“下一步”处理后重跑 | 某项检查本身失败（已列出），停止 |
 | `scan_readonly.sh` / `scan_readonly.py` | 所查范围无命中且无相关进程 | 命中/相关进程需审阅 | 检查失败 |
 | `browser_scan.py` | 所查范围无命中 | 有命中 | 检查失败 |
 | `verify_reset.py` | 所列范围 PASS | 仍有命中 REVIEW | 验收失败 |

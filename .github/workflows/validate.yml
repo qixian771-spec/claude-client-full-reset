@@ -54,5 +54,6 @@ jobs:
         # 1 = hits (scan only); anything else fails the job.
         run: |
           python scripts/browser_scan.py || [ $? -eq 1 ]
+          python scripts/preflight.py || [ $? -eq 1 ]
           python scripts/chrome_purge.py
           node scripts/ls_purge.js
