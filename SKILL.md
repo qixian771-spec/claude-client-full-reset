@@ -36,6 +36,7 @@ license: MIT
 | SQLite/LevelDB 记录精删 | C4，明确浏览器与 profile 选择器 | [浏览器规则](references/browser-layer.md) |
 | 恢复文件/目录 | D，优先选择明确 `--path`，先 `--dry-run` | [恢复说明](references/restore-and-rebuild.md) |
 | 错误、权限或部分完成 | 停止写入并保留证据 | [常见故障](references/pitfalls.md) |
+| 带不懂技术的用户走完全程 | 按对话模板说话与停顿 | [对话模板](references/conversation.md) |
 | 交付结果 | 按本次路线填写证据 | [证据报告](references/evidence-log.md) |
 
 ## 不可放宽的约束
