@@ -101,7 +101,8 @@ def scan_profile(root):
         count = byte_hits(path)
         sql = sqlite_hits(path) if _looks_sqlite(path) else []
         if count or sql:
-            result.append((str(path.relative_to(root)), count, sql))
+            # '/' separators on every platform keep reports comparable.
+            result.append((path.relative_to(root).as_posix(), count, sql))
     return result
 
 

@@ -238,6 +238,7 @@ class TrashTests(Fixture):
             self.assertEqual(move.call_count, 1)
         self.assertTrue(two.exists())
 
+    @unittest.skipIf(sys.platform == 'win32', 'Windows file names cannot contain "; this guards the macOS Finder AppleScript argv')
     def test_quoted_filename_is_argv_not_script(self):
         p = self.file('quote" and \\slash')
         with patch.object(common, 'run', side_effect=lambda args: p.unlink()) as run:
@@ -452,7 +453,7 @@ class InstallationTests(Fixture):
         install.install(target)
         self.assertTrue((target / 'SKILL.md').is_file())
         for doc in target.rglob('*.md'):
-            for link in re.findall(r'\[[^\]]*\]\(([^)]+)\)', doc.read_text()):
+            for link in re.findall(r'\[[^\]]*\]\(([^)]+)\)', doc.read_text(encoding='utf-8')):
                 if '://' not in link and not link.startswith('#'):
                     self.assertTrue((doc.parent / link.split('#')[0]).is_file(), (doc, link))
         self.assertFalse((target / 'scripts/__pycache__').exists())

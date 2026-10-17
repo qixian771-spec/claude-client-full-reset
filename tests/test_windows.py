@@ -18,6 +18,8 @@ from test_workflows import BS, common, platforms, verify
 import winplat
 
 WIN = platforms.WINDOWS
+# An absolute path on the running OS (has a drive on Windows).
+PROFILE = Path(Path.cwd().anchor) / 'Users' / 'fixture'
 
 
 class WindowsFixture(unittest.TestCase):
@@ -179,7 +181,7 @@ class FakeRegistry:
         return self.values[name], 2
 
     def ExpandEnvironmentStrings(self, value):
-        return value.replace('%USERPROFILE%', '/Users/fixture')
+        return value.replace('%USERPROFILE%', str(PROFILE))
 
     def QueryInfoKey(self, key):
         return (0, len(self.names), 0)
@@ -192,7 +194,7 @@ class WindowsRegistryTests(unittest.TestCase):
     def test_documents_folder_expands_registry_value(self):
         fake = FakeRegistry({'Personal': '%USERPROFILE%/OneDrive/Documents'})
         with patch.object(winplat, '_winreg', return_value=fake):
-            self.assertEqual(winplat.documents_dir(), Path('/Users/fixture/OneDrive/Documents'))
+            self.assertEqual(winplat.documents_dir(), PROFILE / 'OneDrive/Documents')
 
     def test_missing_documents_value_is_an_error(self):
         with patch.object(winplat, '_winreg', return_value=FakeRegistry()):
@@ -224,7 +226,7 @@ class WindowsProcessTests(unittest.TestCase):
         with patch.object(common, 'run', return_value=output) as run:
             records = common.process_list()
         args = run.call_args.args[0]
-        self.assertTrue(args[0].endswith('WindowsPowerShell/v1.0/powershell.exe'))
+        self.assertTrue(Path(args[0]).as_posix().endswith('System32/WindowsPowerShell/v1.0/powershell.exe'))
         self.assertIn('-NoProfile', args)
         return records
 

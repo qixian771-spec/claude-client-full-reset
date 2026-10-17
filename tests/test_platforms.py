@@ -99,7 +99,7 @@ class ArgumentTests(unittest.TestCase):
 class EncodingTests(unittest.TestCase):
     def test_cli_switches_redirected_streams_to_utf8(self):
         raw = io.BytesIO()
-        stream = io.TextIOWrapper(raw, encoding='ascii')
+        stream = io.TextIOWrapper(raw, encoding='ascii', newline='\n')
         def main():
             print('中文输出')
             return 0
