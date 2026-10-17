@@ -62,9 +62,13 @@ class MacTableTests(unittest.TestCase):
 
     def test_trace_assets_and_protected_match_legacy(self):
         mac = platforms.MACOS
-        self.assertEqual(mac.trace_names, LEGACY_TRACE_NAMES)
-        self.assertEqual(mac.asset_names, ('settings.json', 'settings.local.json', '.credentials.json',
-                                           'agents', 'hooks', 'plugins'))
+        # 0.3.0 extends both lists from the official Application data docs;
+        # every legacy entry keeps its classification.
+        self.assertEqual(mac.trace_names[:len(LEGACY_TRACE_NAMES)], LEGACY_TRACE_NAMES)
+        self.assertEqual(mac.asset_names[:6], ('settings.json', 'settings.local.json', '.credentials.json',
+                                               'agents', 'hooks', 'plugins'))
+        self.assertFalse(set(mac.trace_names) & set(mac.asset_names))
+        self.assertNotIn('skills', mac.asset_names)
         self.assertEqual(mac.resolve_all(mac.protected, self.home),
                          [self.home / name for name in LEGACY_PROTECTED])
         self.assertEqual(mac.resolve_all(mac.trash_allowed, self.home), [Path('/Applications/Claude.app')])

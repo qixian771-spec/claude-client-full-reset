@@ -192,6 +192,20 @@ class BackupTests(Fixture):
 
 
 class TrashTests(Fixture):
+    def test_preview_warns_about_auto_memory_under_projects(self):
+        self.file('.claude/projects/-a/memory/MEMORY.md')
+        self.file('.claude/projects/-b/s.jsonl')
+        cases = {'.claude/projects': '1 个项目', '.claude/projects/-a': '1 个项目',
+                 '.claude/projects/-a/memory': '1 个项目', '.claude/projects/-b': None}
+        for relative, expected in cases.items():
+            with self.subTest(path=relative), contextlib.redirect_stdout(io.StringIO()) as out:
+                trash.execute([str(self.home / relative)])
+            if expected:
+                self.assertIn('自动记忆', out.getvalue())
+                self.assertIn(expected, out.getvalue())
+            else:
+                self.assertNotIn('自动记忆', out.getvalue())
+
     def test_dangerous_variants_rejected(self):
         paths = ['/', '/Applications/', '/Applications//', '/Library/', str(self.home),
                  str(self.home / 'Library'), str(self.home / 'Library/Application Support'),
@@ -337,6 +351,14 @@ class ScanTests(Fixture):
     def test_verify_check_error_exit2_not_pass(self):
         with patch.object(common, 'require_supported', return_value=platforms.MACOS), patch.object(verify, 'collect', side_effect=PermissionError('denied')), patch.object(sys, 'argv', ['verify']), contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(common.cli(verify.main), 2)
+
+    def test_uninstalled_uses_environment_detection(self):
+        self.file('.local/share/claude/versions/2.1.0', 'binary')
+        with patch.object(common, 'require_supported', return_value=platforms.MACOS), \
+                patch.object(sys, 'argv', ['verify', '--uninstalled']), \
+                patch.object(verify, 'collect', side_effect=AssertionError('must stop before scanning')):
+            with self.assertRaisesRegex(RuntimeError, '仍有 Claude 安装'):
+                verify.main()
 
     def test_verify_clean_and_matches(self):
         with patch.object(common, 'require_supported', return_value=platforms.MACOS), patch.object(sys, 'argv', ['verify']), contextlib.redirect_stdout(io.StringIO()):

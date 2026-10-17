@@ -31,6 +31,8 @@ class Platform:
     shell_files: tuple
     trace_names: tuple
     asset_names: tuple
+    # Native installer version store; program files, not default backup data.
+    cli_install_dirs: tuple
     extra_config: tuple
     desktop_apps: tuple
     cli_candidates: tuple
@@ -196,6 +198,24 @@ class WindowsPlatform(Platform):
         return proc[0].lower() == 'claude.exe' or self.is_cli_process(proc)
 
 
+# ~/.claude top-level entries, classified from the official "Application data"
+# section: https://code.claude.com/docs/en/claude-directory#application-data
+# Traces are data Claude Code writes during sessions (deletable; you lose
+# history, resume, checkpoints and so on). 'projects' also holds per-project
+# auto memory (projects/<project>/memory/). 'teams' and '.cc-writes' were
+# already listed before that page and are kept.
+TRACE_NAMES = ('projects', 'history.jsonl', 'sessions', 'tasks', 'teams',
+               'shell-snapshots', 'session-env', 'file-history', 'paste-cache', '.cc-writes',
+               'plans', 'debug', 'backups', 'cache', 'image-cache', 'uploads', 'dev-mods',
+               'usage-data', 'feedback', 'feedback-bundles', 'stats-cache.json',
+               'remote-settings.json', 'policy-limits.json', 'policy-limits.json.stamp.json',
+               'todos', 'statsig', 'logs')
+# User-authored configuration and state the docs say to keep. 'skills' is
+# handled separately: this skill alone must not count as prior Claude use.
+ASSET_NAMES = ('settings.json', 'settings.local.json', '.credentials.json', 'agents', 'hooks', 'plugins',
+               'CLAUDE.md', 'keybindings.json', 'themes', 'rules', 'commands', 'output-styles',
+               'workflows', 'agent-memory', 'jobs', 'daemon')
+
 MACOS = Platform(
     key='darwin', label='macOS',
     client_data=(
@@ -211,9 +231,9 @@ MACOS = Platform(
         ('~/Library/Saved Application State/com.anthropic.claudefordesktop.savedState', 'SavedState'),
     ),
     shell_files=('~/.zshrc', '~/.bashrc', '~/.profile', '~/.zprofile', '~/.zshenv'),
-    trace_names=('projects', 'history.jsonl', 'sessions', 'tasks', 'teams',
-                 'shell-snapshots', 'session-env', 'file-history', 'paste-cache', '.cc-writes'),
-    asset_names=('settings.json', 'settings.local.json', '.credentials.json', 'agents', 'hooks', 'plugins'),
+    trace_names=TRACE_NAMES,
+    asset_names=ASSET_NAMES,
+    cli_install_dirs=('~/.local/share/claude',),
     extra_config=('~/.config/claude', '~/.anthropic'),
     desktop_apps=('/Applications/Claude.app', '~/Applications/Claude.app'),
     cli_candidates=('~/.local/bin/claude', '/opt/homebrew/bin/claude', '/usr/local/bin/claude'),
@@ -272,8 +292,9 @@ WINDOWS = WindowsPlatform(
                  '%DOCUMENTS%/PowerShell/profile.ps1',
                  '%DOCUMENTS%/WindowsPowerShell/Microsoft.PowerShell_profile.ps1',
                  '%DOCUMENTS%/WindowsPowerShell/profile.ps1'),
-    trace_names=MACOS.trace_names,
-    asset_names=MACOS.asset_names,
+    trace_names=TRACE_NAMES,
+    asset_names=ASSET_NAMES,
+    cli_install_dirs=('~/.local/share/claude',),
     extra_config=MACOS.extra_config,
     desktop_apps=('%LOCALAPPDATA%/AnthropicClaude', '%LOCALAPPDATA%/Packages/Claude_*'),
     cli_candidates=('~/.local/bin/claude.exe', '%APPDATA%/npm/claude.cmd',

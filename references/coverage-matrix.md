@@ -6,14 +6,17 @@
 | --- | --- | --- |
 | 进程 | Chrome/Beta/Canary、Edge、Brave、Vivaldi、Chromium、Arc、Safari；修改还检查 Claude、Code、Cursor、Windsurf，包括应用路径和 helper | 不终止进程，要求用户退出 |
 | 客户端 | `.claude.json`、Claude/Claude-3p App Support、plist、Caches、HTTPStorages、Logs、Saved State、`.config/claude`、`.anthropic` | 具体批准路径移入废纸篓，必须有备份 |
-| CLI 痕迹 | `.claude` 中 projects、history.jsonl、sessions、tasks、teams、shell-snapshots、session-env、file-history、paste-cache、.cc-writes | 同上 |
-| 自有资产 | `.claude` 中技能、agents、hooks、settings 等不归类为痕迹 | 默认保留；整个 `.claude` 需明确授权 |
+| CLI 痕迹 | `.claude` 中 projects、history.jsonl、sessions、tasks、teams、shell-snapshots、session-env、file-history、paste-cache、.cc-writes、plans、debug、backups、cache、image-cache、uploads、dev-mods、usage-data、feedback、feedback-bundles、stats-cache.json、remote-settings.json、policy-limits.json(.stamp.json)、旧版 todos/statsig/logs | 同上；`projects/<项目>/memory/` 是自动记忆，处理 projects 会一并移走，预览会提示 |
+| 自有资产 | `.claude` 中 skills、agents、hooks、plugins、settings*.json、.credentials.json、CLAUDE.md、keybindings.json、themes、rules、commands、output-styles、workflows、agent-memory、jobs、daemon | 默认保留；整个 `.claude` 需明确授权 |
+| 未归类 | `.claude` 中不属于上两类的顶层名称（例如第三方工具文件），只列名称不读内容 | 不自动处理；检测报告 `unclassified_items` 列出供人工确认 |
 | Chromium | 支持的全部浏览器根下 Default、Profile 开头或具有 Preferences/Cookies/History/Network 标记的目录，递归全部普通文件；根下 Local State | SQLite 文本中的服务域名；Local Storage LevelDB key 中的服务域名 |
 | Safari | History.db、RecentlyClosedTabs.plist、Downloads.plist | 无自动精删；已确认文件可备份后移入废纸篓 |
 | HTTP 缓存 | `--deep` 加 Chrome HTTP 缓存，不宣称其他浏览器缓存已检查 | 具体批准路径 |
 | 编辑器 | VS Code/Cursor/Windsurf 扩展名称；对应 settings.json、globalStorage/state.vscdb 内容关键词 | 不自动编辑配置或扩展注册表 |
 | 系统指定目录 | 用户与系统 DiagnosticReports；家目录 Applications、.Trash；用户 Containers、Group Containers、Application Scripts 的名称 | 家目录下明确目标；系统只允许 `/Applications/Claude.app` 及指定名称的系统诊断文件 |
 | Shell | 5 个用户 rc 文件的静态赋值/alias 行，以及当前进程环境变量名称 | 不运行 rc、不自动改 shell 配置 |
+
+痕迹与资产的划分依据 Claude Code 官方文档 [Application data](https://code.claude.com/docs/en/claude-directory#application-data)：其中列为会话产生、可删除的归为痕迹；列为用户配置或“State files to keep”的归为资产。
 
 ## 环境检测入口
 

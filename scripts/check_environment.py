@@ -51,6 +51,13 @@ def command_paths(name, search_path, platform=None):
     return found
 
 
+def auto_memory_projects(projects):
+    """Number of projects with an auto-memory folder (names only, nothing read)."""
+    if not common.directory(projects):
+        return 0
+    return sum(common.directory(child) and common.exists(child / 'memory') for child in projects.iterdir())
+
+
 def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
     platform = platforms.current()
     home = Path.home() if home is None else Path(home)
@@ -91,14 +98,19 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
             local.append(str(path))
             if common.is_link(path):
                 issues.append({'path': str(path), 'reason': '数据/配置路径为符号链接，不能据此安排自动清理'})
+    install_dirs = [str(path) for path in platform.resolve_all(platform.cli_install_dirs, home)
+                    if common.directory(path)]
+    if install_dirs and not active_cli:
+        issues.append({'reason': '发现 Claude Code 版本目录，但未找到可用的 claude 启动器，可能安装不完整'})
     # Installing this skill alone must not count as prior Claude use.
     skill_present = common.exists(home / '.claude/skills/claude-client-full-reset/SKILL.md')
     claude_root = home / '.claude'
+    unclassified = []
     if common.directory(claude_root):
         known = set(platform.trace_names) | set(platform.asset_names) | {'skills'}
-        unknown = sum(child.name not in known for child in claude_root.iterdir())
-        if unknown:
-            issues.append({'reason': f'.claude 含 {unknown} 个范围未识别的顶层项目，需人工审阅；未读取内容'})
+        # Names only; contents are never read.
+        unclassified = sorted(child.name for child in claude_root.iterdir() if child.name not in known)
+    memory_projects = auto_memory_projects(claude_root / 'projects')
     processes = common.process_list()
     related = len(common.relevant_processes(processes))
     claude_running = sum(platform.is_claude_process(proc) for proc in processes)
@@ -117,7 +129,7 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
         status = 'needs_review'
     elif desktop or active_cli:
         status = 'installed'
-    elif local:
+    elif local or unclassified:
         status = 'local_data_only'
     else:
         status = 'not_detected'
@@ -131,11 +143,18 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
         next_steps.append('先按 references/first-run.md 补齐工具基础依赖，再重新检查。')
     if active_cli and not any(item['usable_path'] and item['on_path'] for item in cli):
         next_steps.append('找到 CLI 但它不在当前 PATH 中；按官方安装说明核对 PATH，不自动改 shell 配置或重装。')
+    if unclassified:
+        next_steps.append(f'.claude 有 {len(unclassified)} 个未归类的顶层项目（见 unclassified_items），'
+                          '工具不会自动处理；需要时人工逐项确认用途。')
+    if memory_projects:
+        next_steps.append(f'.claude/projects 中有 {memory_projects} 个项目含自动记忆（memory/）；'
+                          '处理 projects 会一并移走这些记忆，需单独确认是否保留。')
     if related:
         next_steps.append('环境检测可继续；备份、清理、恢复和最终验收必须等相关应用正常退出后，在独立终端执行。')
     return {
         'schema_version': 1, 'platform': sys.platform, 'status': status, 'label': LABELS[status],
-        'desktop_paths': desktop, 'cli_candidates': cli, 'local_paths': local,
+        'desktop_paths': desktop, 'cli_candidates': cli, 'cli_install_dirs': install_dirs,
+        'local_paths': local, 'unclassified_items': unclassified, 'auto_memory_projects': memory_projects,
         'skill_present': skill_present, 'registered_apps': registered, 'related_process_count': related,
         'claude_process_count': claude_running, 'issues': issues,
         'python': {'version': '.'.join(map(str, sys.version_info[:3])), 'supported': python_ok},
@@ -163,8 +182,12 @@ def main():
             print('[Desktop 目录] ' + path)
         for item in report['cli_candidates']:
             print(f'[CLI 路径] {item["path"]}；在 PATH={item["on_path"]}；{item["reason"]}')
+        for path in report['cli_install_dirs']:
+            print('[CLI 版本目录] ' + path)
         for path in report['local_paths']:
             print('[本地数据/配置] ' + path)
+        for name in report['unclassified_items']:
+            print('[未归类] .claude/' + name)
         for name in report['registered_apps']:
             print('[系统登记] ' + name)
         for name, paths in report['tools'].items():

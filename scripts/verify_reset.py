@@ -98,8 +98,12 @@ def main():
     platform = common.require_supported()
     common.require_stopped()
     if args.uninstalled:
-        import shutil
-        if any(common.exists(path) for path in platform.expand_all(platform.desktop_apps)) or shutil.which('claude'):
+        # Same installation rules as the environment check (PATH, PATHEXT,
+        # known launchers, Desktop locations, native version store).
+        import check_environment
+        found = check_environment.collect()
+        if (found['desktop_paths'] or found['cli_install_dirs']
+                or any(item['usable_path'] for item in found['cli_candidates'])):
             raise RuntimeError('卸载验收前提不满足：仍有 Claude 安装')
     total = report(collect(deep=args.deep), args.quiet)
     print('PASS：所列范围未见命中（不等于全盘擦除）' if not total else 'REVIEW：仍有命中项，需逐项判断')

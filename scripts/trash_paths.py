@@ -56,6 +56,20 @@ def move_to_trash(path):
         finder_trash(path)
 
 
+def auto_memory_dirs(path):
+    """Auto-memory folders under ~/.claude/projects affected by moving path."""
+    projects = Path.home().resolve() / '.claude/projects'
+    if path != projects and projects not in path.parents:
+        return 0
+    if path.name == 'memory' and path.parent.parent == projects:
+        return 1
+    if path.parent == projects:
+        return int(common.exists(path / 'memory'))
+    if path == projects:
+        return sum(common.exists(child / 'memory') for child in path.iterdir() if common.directory(child))
+    return 0
+
+
 def execute(paths, apply=False, backup_dir=None):
     if not paths or len(paths) > 10:
         raise ValueError('每次需要 1–10 个明确路径')
@@ -70,6 +84,10 @@ def execute(paths, apply=False, backup_dir=None):
         common.require_stopped()
         for path in approved:
             backup.require_covered(backup_dir, path)
+    for path in approved:
+        memory = auto_memory_dirs(path)
+        if memory:
+            print(f'[注意] {path} 含 {memory} 个项目的自动记忆（memory/）；处理后这些记忆一并移走')
     # No target is touched until the entire batch passes preflight.
     for path in approved:
         if apply:

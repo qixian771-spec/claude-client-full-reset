@@ -20,6 +20,12 @@ class EnvironmentTests(Fixture):
             self.executable(name)
         self.apps = [self.home / 'Applications/Claude.app']
 
+    def executable_at(self, path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('#!/bin/sh\nexit 99\n')
+        path.chmod(0o700)
+        return path
+
     def executable(self, name):
         path = self.bin / name
         path.write_text('#!/bin/sh\necho MUST-NOT-EXECUTE\nexit 99\n')
@@ -114,11 +120,40 @@ class EnvironmentTests(Fixture):
         self.assertEqual(report['missing_base_tools'], ['ditto'])
         self.assertEqual(self.main(report)[0], 1)
 
-    def test_unknown_claude_directory_entries_require_review(self):
+    def test_unknown_claude_directory_entries_are_listed_for_review(self):
+        # Contract change (0.3.0): unknown names are listed in
+        # unclassified_items instead of forcing needs_review; contents are
+        # still never read and nothing is scheduled for cleanup.
         self.file('.claude/custom-state', 'do not read')
         report = self.collect()
-        self.assertEqual(report['status'], 'needs_review')
+        self.assertEqual(report['status'], 'local_data_only')
+        self.assertEqual(report['unclassified_items'], ['custom-state'])
+        self.assertTrue(any('unclassified_items' in step for step in report['next_steps']))
         self.assertNotIn('do not read', json.dumps(report))
+
+    def test_documented_claude_entries_are_classified(self):
+        for name in ('CLAUDE.md', 'backups/a', 'cache/changelog.md', 'plans/p.md', 'commands/x.md',
+                     'output-styles/s.md', 'keybindings.json', 'stats-cache.json', 'agent-memory/m.md'):
+            self.file('.claude/' + name)
+        report = self.collect()
+        self.assertEqual(report['unclassified_items'], [])
+        self.assertEqual(report['status'], 'local_data_only')
+
+    def test_auto_memory_projects_are_counted_without_reading(self):
+        self.file('.claude/projects/-a/memory/MEMORY.md', 'private memory')
+        self.file('.claude/projects/-b/session.jsonl', 'transcript')
+        report = self.collect()
+        self.assertEqual(report['auto_memory_projects'], 1)
+        self.assertTrue(any('自动记忆' in step for step in report['next_steps']))
+        self.assertNotIn('private memory', json.dumps(report))
+
+    def test_native_version_store_without_launcher_requires_review(self):
+        self.file('.local/share/claude/versions/2.1.0', 'binary')
+        report = self.collect()
+        self.assertEqual(report['status'], 'needs_review')
+        self.assertEqual(report['cli_install_dirs'], [str(self.home / '.local/share/claude')])
+        self.executable_at(self.home / '.local/bin/claude')
+        self.assertEqual(self.collect()['status'], 'installed')
 
     def test_permission_error_propagates_not_absence(self):
         original = common.exists
