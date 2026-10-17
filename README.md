@@ -1,8 +1,8 @@
 # Claude Client Full Reset
 
-macOS 上 Claude Code / Claude Desktop 环境检测、本地数据检查、备份与清理的 Agent Skill。MIT 开源。
+macOS 与 Windows 上 Claude Code / Claude Desktop 环境检测、本地数据检查、备份与清理的 Agent Skill。MIT 开源。
 
-支持本地文件检查、SHA-256 备份校验、Finder 废纸篓移动、SQLite 域名记录和 LevelDB key 清理。**清理默认预览，实际清理必须有校验通过的备份；恢复拒绝覆盖。** 不处理服务端数据，不承诺解除账号限制或物理擦除磁盘。
+支持本地文件检查、SHA-256 备份校验、移入废纸篓（macOS Finder）或回收站（Windows，仅本地固定磁盘）、SQLite 域名记录和 LevelDB key 清理；Firefox 只读扫描；凭证位置只报告存在与否。**清理默认预览，实际清理必须有校验通过的备份；恢复拒绝覆盖。** 不处理服务端数据，不承诺解除账号限制或物理擦除磁盘。
 
 ## 交给其他 AI 执行
 
@@ -14,9 +14,9 @@ macOS 上 Claude Code / Claude Desktop 环境检测、本地数据检查、备�
 
 ## 首次准备
 
-需要 macOS、Python 3.10+、Git；仅 LevelDB 功能另需 Node.js 18+ 和 npm。先阅读 [首次准备](references/first-run.md)：依赖下载、终端选择、macOS 权限和浏览器路径定位均在其中。
+需要 macOS 或 Windows 10/11、Python 3.10+、Git；仅 LevelDB 功能另需 Node.js 18+ 和 npm。先阅读 [首次准备](references/first-run.md)：依赖下载、终端选择、系统权限和浏览器路径定位均在其中（Windows 见第 5 节）。
 
-**安装 skill 不等于能在 Claude 自己的会话内重置自己。** `--client claude` 安装到 Claude Code 的 skill 目录，Claude Desktop 是可清理对象，不是这个安装选项的技能宿主。Agent 可帮助准备清单；备份、写入、恢复和最终验收前，需保存工作并退出相关应用，在独立 Terminal/iTerm 执行。不能跳过进程检查。
+**安装 skill 不等于能在 Claude 自己的会话内重置自己。** `--client claude` 安装到 Claude Code 的 skill 目录，Claude Desktop 是可清理对象，不是这个安装选项的技能宿主。Agent 可帮助准备清单；备份、写入、恢复和最终验收前，需保存工作并退出相关应用，在独立终端（macOS Terminal/iTerm，Windows Terminal/PowerShell）执行。不能跳过进程检查。
 
 ## 下载与安装
 
@@ -58,6 +58,17 @@ npm ci
 
 如果从安装目录运行，就在安装目录装依赖；如果从本次下载的源码运行，就在源码目录装依赖。
 
+Windows 在 PowerShell 中下载与安装（不需要管理员身份）：
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\Developer" | Out-Null
+Set-Location "$env:USERPROFILE\Developer"
+git clone https://github.com/qixian771-spec/claude-client-full-reset.git
+Set-Location claude-client-full-reset
+py -3 --version
+py -3 tools\install.py --client claude
+```
+
 ## 不确定是否装过？先做环境检测
 
 在下载的源码或已安装 skill 根目录运行；可以保持现有软件运行：
@@ -68,7 +79,9 @@ python3 scripts/check_environment.py
 python3 scripts/check_environment.py --json
 ```
 
-只查常见安装路径、依赖路径、本地数据/配置位置和进程数量；不启动 Claude、不联网、不安装或修改环境。仅装这个 skill 不会被计作 Claude 使用记录。
+Windows：`py -3 scripts\check_environment.py --json`。
+
+只查常见安装路径、依赖路径、本地数据/配置位置和进程数量；不启动 Claude、不联网、不安装或修改环境。仅装这个 skill 不会被计作 Claude 使用记录。报告还会列出 `.claude` 中未归类的名称、含自动记忆的项目数、凭证位置是否存在；设置了 `CLAUDE_CONFIG_DIR` 时会提示默认范围不完整。
 
 报告区分未发现、发现安装候选、只有本地数据和需审阅异常，并给出下一步。没有本地数据的人直接按 [首次安装清单](references/environment-check.md) 准备，无需先清理；已有环境的人先保留配置。权限或查询失败返回错误，不能当成“从没用过”。
 
@@ -138,6 +151,22 @@ python3 scripts/verify_reset.py
 
 `PASS` 只覆盖工具列出的位置；废纸篓、保留的编辑器配置等仍可能被报告，须逐项说明，不为取得 PASS 自动删除。钥匙串、服务端、快照、其他用户、任意项目目录等不在自动验收范围。
 
+### Windows 对照命令
+
+规则与上面完全相同，只是入口和路径写法不同。逐条执行，`C:\absolute\...` 必须替换：
+
+```powershell
+py -3 scripts\scan_readonly.py
+py -3 scripts\backup.py
+py -3 scripts\backup.py --include "$env:LOCALAPPDATA\Google\Chrome\User Data\Default"
+py -3 scripts\backup.py --verify C:\absolute\backup-directory
+py -3 scripts\trash_paths.py --dry-run C:\absolute\approved\path
+py -3 scripts\trash_paths.py --apply --backup C:\absolute\backup-directory C:\absolute\approved\path
+py -3 scripts\verify_reset.py
+```
+
+Windows 要点：退出托盘里的 Claude 和后台常驻的 Edge；Claude Desktop（MSIX）的数据在 `%LOCALAPPDATA%\Packages\Claude_…\LocalCache\Roaming\Claude`，包根目录和 `WindowsApps` 不处理；只移入本地固定磁盘的回收站；junction、OneDrive 占位文件、UNC 路径一律拒绝。详见 [首次准备第 5 节](references/first-run.md#5-windows-首次准备) 与 [常见故障](references/pitfalls.md)。
+
 ## 局部恢复：只还原需要的原目标
 
 备份可能含凭证，目录权限仅当前用户可访问，不要上传。下面的 `--list` 校验备份后只列原始来源路径，不输出内容。
@@ -167,7 +196,7 @@ python3 scripts/backup.py --restore /absolute/backup-directory --path /absolute/
 - 错误必须停止：不切换复制方式，不吞异常，不把无法查询进程当成无进程。
 - 全批预检之后按目标执行，不具备跨路径、跨数据库事务；后续失败时前序操作可能已完成。
 - SQLite 提交后 VACUUM 失败仍返回错误，已提交删除不会自动撤销。LevelDB 每库原子 batch。
-- 恢复使用 `ditto` 并逐项校验。失败可能留下不完整目标；保留现场并核查，不能盲目重跑、自动删掉冲突目标或改写备份清单。
+- 恢复在 macOS 使用 `ditto`、在 Windows 使用内置严格复制，并逐项校验；备份带平台标记，不能跨平台使用。失败可能留下不完整目标；保留现场并核查，不能盲目重跑、自动删掉冲突目标或改写备份清单。
 - 备份清单是内容校验，不是数字签名，只使用可信本地备份。
 - 不输出 cookie/token、环境变量值或 Local Storage key 内容。
 
@@ -183,6 +212,6 @@ python3 -m unittest discover -s tests -v
 node --test tests/level.test.js
 ```
 
-GitHub Actions 在 macOS 和 Linux 运行结构检查与隔离夹具测试；Linux 只测试可移植逻辑，清理 CLI 仍限 macOS。测试不会清理真实 Claude / 浏览器数据。
+GitHub Actions 在 macOS、Windows 和 Linux 运行结构检查与隔离夹具测试；macOS 与 Windows 还在 runner 自己的数据上跑只读 smoke 和浏览器预览，Windows 另有 junction、回收站、注册表、进程查询的原生测试。Linux 只测试可移植逻辑，清理 CLI 仅支持 macOS 与 Windows。测试不会清理真实 Claude / 浏览器数据。
 
 [任务与验收记录](docs/release-tasks.md) · [测试报告](docs/acceptance.md) · [首次准备](references/first-run.md) · [MIT 许可证](LICENSE)

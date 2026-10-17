@@ -2,6 +2,8 @@
 
 这是本 skill 的执行编排。先按用户目标选择一条路线，不把所有章节当作必须依次运行的脚本。各条命令均以本 skill/源码根目录为工作目录；下面的 `/absolute/...` 是模板，必须替换为本次已核实的路径后才能执行。
 
+命令按 macOS 书写。**Windows**：`python3 scripts/X.py` 写成 `py -3 scripts\X.py`；`bash scripts/X.sh` 写成 `py -3 scripts\X.py`（Windows 没有 `.sh` 包装）；路径写成 `C:\...`；在 PowerShell 用 `$LASTEXITCODE` 读退出码。规则、退出码、停止条件两个平台相同。
+
 ## 0. 接收任务：先提取约束，不先重置
 
 从当前及此前对话提取以下信息，已有信息直接沿用，不重复询问：
@@ -9,7 +11,7 @@
 | 输入 | 记录内容 | 缺少时 |
 | --- | --- | --- |
 | 用户目标 | 环境检测、首次配置、检查残留、清理/重置、恢复、卸载 | 先做只读检测；只在后续路线确实不明确时问一句 |
-| 目标产品 | Desktop、Claude Code CLI、本 skill；不要把 Desktop 默认改成 CLI | 只读检查可先进行；实际安装前确认产品 |
+| 目标产品与平台 | Desktop、Claude Code CLI、本 skill；macOS 或 Windows；不要把 Desktop 默认改成 CLI | 只读检查可先进行；平台以检测 JSON 的 `platform` 为准；实际安装前确认产品 |
 | 当前限制 | 不联网、不启动 Claude、不关正在用的软件、不动代理/防火墙等 | 默认保留现有环境；用户明确限制一直生效，直到用户改变 |
 | 已授权操作 | 检查、安装、具体修改、具体清理或恢复范围 | 缺少写入授权时只做到可审阅计划，不能靠检测结果推断授权 |
 | 已知路径和备份 | 来源目录、安装目录、profile、备份目录及证据 | 查清真实路径；不能编造路径或使用模板占位符执行 |
@@ -32,7 +34,7 @@ python3 scripts/check_environment.py --json
 
 1. 退出 **2 或其他异常码**、输出缺失、JSON 无法解析：停止依赖该检测的后续动作，报告具体错误；没有可用结论。
 2. 退出 **1**：读取 `issues`、`missing_base_tools`、`python.supported`。区分路径异常和依赖缺少。只安排已授权的原因修复，不进入备份/清理/恢复。修复后重新检测；没有修复不能原样循环重试。
-3. 退出 **0**：读取 `status`、`desktop_paths`、`cli_candidates`、`local_paths`、`related_process_count`、`next_steps`，再按下表与用户意图共同选路。
+3. 退出 **0**：读取 `status`、`desktop_paths`、`cli_candidates`、`cli_install_dirs`、`local_paths`、`unclassified_items`、`auto_memory_projects`、`credential_locations`、`registered_apps`、`related_process_count`、`next_steps`，再按下表与用户意图共同选路。`unclassified_items` 只是名称清单，不是异常也不是清理目标；`auto_memory_projects` 大于 0 时，任何涉及 `projects` 的计划都要单独列出自动记忆的取舍。
 4. `status=needs_review` 即使与退出码矛盾，也停止写入并核实报告来源；不能猜成正常状态。
 
 | status | 可以作出的判断 | 不能作出的判断 | 下一步 |
@@ -89,8 +91,8 @@ python3 scripts/check_environment.py --json
 
 | 条件 | 命令 | 判断 |
 | --- | --- | --- |
-| 用户同意浏览器范围，且浏览器已正常退出 | `bash scripts/scan_readonly.sh` | 0 无命中；1 有命中或相关进程需审阅；2 失败 |
-| 用户明确排除/暂缓浏览器检查 | `bash scripts/scan_readonly.sh --no-browser` | 必须记录浏览器未查，不是全范围通过 |
+| 用户同意浏览器范围，且浏览器已正常退出 | `bash scripts/scan_readonly.sh`（Windows：`py -3 scripts\scan_readonly.py`） | 0 无命中；1 有命中或相关进程需审阅；2 失败 |
+| 用户明确排除/暂缓浏览器检查 | 同上加 `--no-browser` | 必须记录浏览器未查，不是全范围通过 |
 | 只检查浏览器，且已退出浏览器 | `python3 scripts/browser_scan.py` | 0 无命中；1 有命中；2 失败 |
 
 `--deep` 仅在需要扩大到文档列明的 Chrome HTTP 缓存范围时添加，不能把它说成全机深度取证。用户要求不关闭正在用的浏览器时，保留软件运行；可以交付环境检测结果和待执行扫描，不能擅自切成排除浏览器后称任务全部完成。
@@ -105,9 +107,9 @@ python3 scripts/check_environment.py --json
 
 ### C1. 交接独立终端
 
-在 Claude Code 或 Code/Cursor/Windsurf 内执行时，不可能一边保持宿主运行，一边满足本工具全部写入前提。保存任务卡，将以下内容交给独立 Terminal/iTerm：源码绝对目录、已经批准的目标、保留项、备份命令、预览命令、执行及验收顺序、每步停止条件。不要只给一句“退出再运行”。
+在 Claude Code 或 Code/Cursor/Windsurf 内执行时，不可能一边保持宿主运行，一边满足本工具全部写入前提。保存任务卡，将以下内容交给独立终端（macOS：Terminal/iTerm；Windows：Windows Terminal/PowerShell，不用管理员身份）：平台、源码绝对目录、已经批准的目标、保留项、备份命令、预览命令、执行及验收顺序、每步停止条件。不要只给一句“退出再运行”。
 
-由用户保存工作、正常退出相关应用。若用户仍要使用它们，状态为“等待退出前提”，不自动结束进程或绕过保护。应用关闭前可完成说明和清单，不能提前写入。
+由用户保存工作、正常退出相关应用（Windows 还包括托盘里的 Claude 和后台常驻的 Edge，见 [首次准备](first-run.md#52-退出相关应用)）。若用户仍要使用它们，状态为“等待退出前提”，不自动结束进程或绕过保护。应用关闭前可完成说明和清单，不能提前写入。
 
 ### C2. 创建一次覆盖本批目标的备份
 
@@ -143,7 +145,7 @@ bash scripts/trash_paths.sh --dry-run /absolute/approved/path
 bash scripts/trash_paths.sh --apply --backup /absolute/backup-directory /absolute/approved/path
 ```
 
-每批 1–10 项；多项作为独立参数传递。禁止把 `.claude` 中个别路径的授权扩大成整个 `.claude`。Finder 授权失败按 [首次准备](first-run.md) 定位具体权限，不能改用永久删除。
+每批 1–10 项；多项作为独立参数传递。禁止把 `.claude` 中个别路径的授权扩大成整个 `.claude`。预览出现“含 N 个项目的自动记忆”时，先向用户确认这些记忆的取舍。macOS 的 Finder 授权失败按 [首次准备](first-run.md) 定位具体权限；Windows 回收站拒绝（非固定磁盘、回收站设为直接删除、永久删除确认框选了“否”）就停止。两者都不能改用永久删除。
 
 ### C4. SQLite / LevelDB 精删分支
 
@@ -153,7 +155,7 @@ bash scripts/trash_paths.sh --apply --backup /absolute/backup-directory /absolut
 python3 scripts/chrome_purge.py --browser Chrome --profile Default
 ```
 
-只有预览成功并审阅命中范围后，才以相同选择器增加 `--apply --backup /absolute/backup-directory`。LevelDB 对应入口为 `node scripts/ls_purge.js`，同样先预览后执行，依赖需已准备。
+只有预览成功并审阅命中范围后，才以相同选择器增加 `--apply --backup /absolute/backup-directory`。LevelDB 对应入口为 `node scripts/ls_purge.js`，同样先预览后执行，依赖需已准备；Windows 默认通过 `py -3` 调用 Python，可用 `CLAUDE_RESET_PYTHON` 指定解释器。输出 `[EMPTY]` 表示该 profile 的库从未建好，按 0 条处理。
 
 SQL/LevelDB 预览退出 0 只表示预览成功，是否有匹配需读输出条数。SQL 文本、LevelDB key 精删均不是整库无痕承诺。不要因为出现触发器、外键、损坏库、锁或权限失败，就扩大为删库、删 profile 或关闭约束。
 
@@ -194,10 +196,10 @@ SQL/LevelDB 预览退出 0 只表示预览成功，是否有匹配需读输出�
 | 入口 | 0 | 1 | 2/其他异常 |
 | --- | --- | --- | --- |
 | `check_environment.py` | 检测完成且无基础准备问题；可仍有安装/数据 | 异常或基础依赖待处理 | 检测失败，不能得出未安装结论 |
-| `scan_readonly.sh` | 所查范围无命中且无相关进程 | 命中/相关进程需审阅 | 检查失败 |
+| `scan_readonly.sh` / `scan_readonly.py` | 所查范围无命中且无相关进程 | 命中/相关进程需审阅 | 检查失败 |
 | `browser_scan.py` | 所查范围无命中 | 有命中 | 检查失败 |
 | `verify_reset.py` | 所列范围 PASS | 仍有命中 REVIEW | 验收失败 |
-| `backup.py`、`trash_paths.sh` | 指定操作或预览成功 | 不是正常成功状态，按失败处理 | 失败，检查可能已完成的前序项 |
+| `backup.py`、`trash_paths.sh` / `trash_paths.py` | 指定操作或预览成功 | 不是正常成功状态，按失败处理 | 失败，检查可能已完成的前序项 |
 | `chrome_purge.py`、`ls_purge.js` | 操作或预览成功；需另读匹配条数 | 不是“有命中”约定，按失败处理 | 失败，可能部分库已提交 |
 
 未知参数、命令缺失、超时、读取失败均停止。命令输出中有 `[OK]` 不代表后来没有出错，必须核对整条命令的最终退出码。
@@ -233,3 +235,10 @@ SQL/LevelDB 预览退出 0 只表示预览成功，是否有匹配需读输出�
 | 只恢复一个历史文件，设置仍在 | D，用准确 `--path` | 删除保留设置或整包覆盖 |
 | 恢复后扫描出现旧记录 | 以备份一致性验收 | 再次清理以取得 PASS |
 | 账号曾受限制但要查本地环境 | 按实际本地目标检测或准备，说明账号未查 | 承诺重置解封或伪造身份 |
+| 检测报 12 个 `unclassified_items` | 列出名称，说明工具不处理、需要时人工确认 | 当作异常停住，或当作痕迹删除 |
+| 要清理 `.claude/projects`，`auto_memory_projects` 为 6 | 先单独确认自动记忆的取舍，再定具体路径 | 不提记忆就整目录移走 |
+| 设置了 `CLAUDE_CONFIG_DIR` | 按 needs_review 停止，说明默认范围不完整 | 只查 `~/.claude` 就宣称完成 |
+| Windows，Edge 关了窗口但 `msedge.exe` 仍在 | 等待退出前提，告诉用户关闭启动增强/后台运行 | 结束进程或绕过检查 |
+| Windows，Desktop 是 MSIX 安装 | 数据在 `Packages\Claude_*\LocalCache\Roaming\Claude`；只处理该子目录 | 移动包根目录或 `WindowsApps` |
+| Windows，目标在 U 盘或 OneDrive 占位文件 | 拒绝并说明原因 | 改用永久删除或跟随占位文件 |
+| 在 Windows 上校验 macOS 备份 | 报告跨平台拒绝 | 修改 manifest 绕过 |

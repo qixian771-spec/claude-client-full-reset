@@ -51,7 +51,8 @@ def main():
         target = Path.home() / '.claude/skills' / NAME
     target = install(target)
     print(f'[OK] 已安装: {target}')
-    print('先在该目录运行 python3 scripts/check_environment.py，只读检测；准备步骤见 references/first-run.md。')
+    command = 'py -3 scripts\\check_environment.py' if sys.platform == 'win32' else 'python3 scripts/check_environment.py'
+    print(f'先在该目录运行 {command}，只读检测；准备步骤见 references/first-run.md。')
     print('仅 LevelDB 功能需要在该目录执行 npm ci。')
     print('Claude Code 只能协助准备；备份、清理和恢复需退出相关应用后在独立终端执行。')
     return 0

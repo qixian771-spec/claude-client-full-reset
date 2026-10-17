@@ -18,6 +18,14 @@ BLOB、schema 和已删除页中的关键词仅作为检查结果，不承诺全
 
 使用 Buffer 读取和删除键，避免 UTF-8 解码破坏二进制 key。只匹配服务域名 key，实际删除使用每库原子 batch 并复核键不存在。读取、写入、关闭或进程检查失败都会终止。日志只显示条数，不显示 key 或 value。
 
+## Windows 说明
+
+Chromium 根目录在 `%LOCALAPPDATA%\<厂商>\User Data`，Canary 为 `Chrome SxS`；不支持 Arc。Cookie 值在 Windows 上加密存储，但 `host_key` 等域名列是明文，SQLite 按域名精删照常工作。HTTP 缓存位于 profile 内，默认扫描已包含，`--deep` 不再额外扫描。`ls_purge.js` 通过 `py -3`（或 `CLAUDE_RESET_PYTHON`）调用 Python 获取浏览器根目录、检查进程和备份覆盖。
+
+## Firefox
+
+`browser_scan.py` 只读扫描各 profile 的 `places.sqlite`、`cookies.sqlite`、`webappsstore.sqlite`、`formhistory.sqlite`（快照查询），以及 `storage/default/` 下源为 claude.ai、anthropic.com（含子域、端口和容器后缀）的站点目录名。没有 Firefox 精删器；需要处理时按具体文件单独评估并备份。
+
 ## 选择范围
 
 `--browser` 是显示名称（如 Chrome、Chrome Canary、Edge）；`--profile` 是目录名称。拼错浏览器参数或指定不存在的 profile 会失败，不会转为全量处理。不指定筛选参数意味着检查所有支持的 profiles，实际修改前仍需确认完整清单。

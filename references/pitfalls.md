@@ -23,6 +23,21 @@
 | 文件不存在、路径为符号链接或系统保护目录 | 拒绝移动，重新确认目标；不要改用强制删除 |
 | Finder 拒绝 | 停止，报告错误；不换用永久删除 |
 | 已安装同名 skill | 安装器拒绝覆盖；检查旧安装后由用户安排迁移 |
+| 检测报 `unclassified_items` | 只是名称清单，不是异常；需要时人工确认用途，不要据此删除 |
+| 检测提示 `auto_memory_projects` | `.claude/projects` 里有自动记忆；处理 projects 前单独确认是否保留，必要时只处理具体会话文件 |
+| 设置了 `CLAUDE_CONFIG_DIR` | 配置、历史、凭证可能在别的目录；检测为 needs_review，默认范围的扫描和清理结论不完整 |
+| macOS 关闭 Safari 后仍提示 Safari 在运行 | 0.3.0 起 `.app` 内独立运行的小组件扩展和 XPC 服务不再计入；若仍提示，用“活动监视器”确认 Safari 本体是否真的在运行 |
+| Windows：`msedge.exe` 仍在运行 | Edge 的“启动增强”或“关闭后继续运行后台扩展”让它常驻；在 Edge 设置里关闭后退出，或由用户自行在任务管理器确认后结束；工具不结束进程 |
+| Windows：托盘里的 Claude 仍在运行 | 只关窗口不算退出；在通知区域图标菜单选“退出” |
+| Windows：`环境变量 APPDATA/LOCALAPPDATA/PATHEXT/SystemRoot 未设置` | 环境异常，停止；不要手动伪造变量继续 |
+| Windows：`py` 找不到或 `ls_purge.js` 无法启动 Python | 安装带 py 启动器的 Python，或设置 `CLAUDE_RESET_PYTHON` 为完整路径；不要改用别的解释器名称 |
+| Windows：路径被拒（UNC、`\\?\`、junction、重解析点、OneDrive 占位文件） | 设计如此；改用本地盘符路径，或先人工处理该位置，不能绕过 |
+| Windows：MSIX 包里的路径被拒 | `Packages` 下只允许 `Claude_*\LocalCache\Roaming\Claude(-3p)`；包根目录和应用本体用系统“设置 → 应用”卸载 |
+| Windows：回收站移动被拒 | U 盘、网络盘或“直接删除”的回收站会永久删除，所以拒绝；若弹出“永久删除”确认框，选“否”，工具报错停止 |
+| Windows：受控文件夹访问拦截写入 | 按安全中心通知核对程序和路径；是否放行由用户决定；工具不修改安全设置 |
+| Windows：备份提示“位于用户目录之外” | Windows 不按 0700 限制访问；确认该位置只有本人可读，或改用用户目录下的父目录 |
+| 备份来自其他平台 | 拒绝；Windows 与 macOS 的备份不能互相校验或恢复 |
+| LevelDB 输出 `[EMPTY]` | 该 profile 的 Local Storage 从未建好库（没有 CURRENT，也没有记录文件），按 0 条处理；有记录文件却缺 CURRENT 会报“可能损坏”并停止 |
 
 禁止 `except: pass`、失败后返回空结果、`|| true`、校验失败后仅打印清单、截断输出掩盖失败。
 
