@@ -5,6 +5,7 @@ Exercises platform code against the real OS (registry, environment, folders)
 instead of fixtures. Any exception fails the run; findings counts are printed
 but not judged, because runner images may contain arbitrary software.
 """
+from collections import Counter
 from pathlib import Path
 import sys
 
@@ -28,9 +29,14 @@ def paths():
 
 
 def processes():
+    platform = common.require_supported()
     records = common.process_list()
     print(f'[processes] total={len(records)}; relevant={len(common.relevant_processes(records))}; '
           f'browsers={len(common.relevant_processes(records, True))}')
+    # Table names only, never process paths or arguments.
+    names = platform.browser_processes + platform.client_processes
+    matched = Counter(filter(None, (platform.matched_name(proc, names) for proc in records)))
+    print('[processes] matched app names: ' + (', '.join(f'{k}x{v}' for k, v in sorted(matched.items())) or 'none'))
 
 
 def environment():

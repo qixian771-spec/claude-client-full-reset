@@ -127,10 +127,16 @@ class Platform:
     def browser_names(self):
         return [name for name, _ in self.browser_roots]
 
-    def match_process(self, proc, names):
+    def matched_name(self, proc, names):
+        """The table name a process matches (safe to print), or None."""
         base = Path(proc).name
-        return any(base == name or base.startswith(name + ' Helper') or
-                   f'/{name}.app/' in proc for name in names)
+        for name in names:
+            if base == name or base.startswith(name + ' Helper') or f'/{name}.app/' in proc:
+                return name
+        return None
+
+    def match_process(self, proc, names):
+        return self.matched_name(proc, names) is not None
 
     def is_cli_process(self, proc):
         return bool(CLI_PROCESS.search(proc)) or CLI_PACKAGE in proc
@@ -193,8 +199,11 @@ class WindowsPlatform(Platform):
         if not re.fullmatch(r'[A-Za-z]:', path.drive):
             raise ValueError(f'只支持本地盘符绝对路径（不支持 UNC、\\\\?\\ 或网络路径）: {path}')
 
+    def matched_name(self, proc, names):
+        return next((name for name in names if proc[0].lower() == name.lower()), None)
+
     def match_process(self, proc, names):
-        return proc[0].lower() in {name.lower() for name in names}
+        return self.matched_name(proc, names) is not None
 
     def is_cli_process(self, proc):
         name, _, command = proc
