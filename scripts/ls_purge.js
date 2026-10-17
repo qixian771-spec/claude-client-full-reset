@@ -80,6 +80,21 @@ function iterProfiles(root) {
       ? [[name, folder]] : [];
   });
 }
+// LevelDB data: numbered tables/logs, manifests and temporary manifest files.
+const DATA_FILE = /^(?:\d+\.(?:ldb|log|sst|dbtmp)|MANIFEST-\d+)$/;
+// A browser may create the directory before writing any data. Only a
+// directory with neither CURRENT nor any data file counts as empty; data
+// without CURRENT may be damaged and stops the run.
+function levelState(dir) {
+  const names = fs.readdirSync(dir).sort();
+  if (names.includes('CURRENT')) return 'database';
+  const data = names.filter(name => DATA_FILE.test(name));
+  if (data.length) {
+    throw new Error('LevelDB has data files but no CURRENT; possibly damaged: ' + dir +
+      ' (files: ' + names.join(', ') + ')');
+  }
+  return 'empty';
+}
 async function operate(dir, apply, Database = loadDatabase()) {
   const db = new Database(dir, { createIfMissing: false, keyEncoding: 'buffer', valueEncoding: 'buffer' });
   try {
@@ -139,6 +154,10 @@ async function main() {
       profiles++;
       const dir = path.join(folder, 'Local Storage/leveldb');
       if (!exists(dir)) continue;
+      if (levelState(dir) === 'empty') {
+        console.log(`[EMPTY] ${name}/${profile}: Local Storage LevelDB not initialised (no CURRENT, no data files); counted as 0, not opened`);
+        continue;
+      }
       const count = await purgeDir(dir);
       if (count) {
         if (values.apply) requireCovered(values.backup, dir);
@@ -164,7 +183,7 @@ function formatError(error) {
   const line = item => (item.code ? item.code + ': ' : '') + String(item.message).split('\n')[0];
   return '[ERROR] ' + line(error) + (error.cause instanceof Error ? ' (cause: ' + line(error.cause) + ')' : '');
 }
-module.exports = { purgeDir, operate, inventory, iterProfiles, requireStopped, browserRoots, pythonCommand, formatError, main };
+module.exports = { purgeDir, operate, inventory, iterProfiles, requireStopped, browserRoots, pythonCommand, formatError, levelState, main };
 if (require.main === module) {
   main().catch(error => {
     console.error(formatError(error));
