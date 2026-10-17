@@ -72,9 +72,9 @@ class Platform:
     def resolve(self, entry, home=None):
         if '*' in entry:
             raise ValueError(f'通配位置需要 expand(): {entry}')
-        home = Path.home() if home is None else Path(home)
         if entry.startswith('~/'):
-            return home / entry[2:]
+            # Only home-relative entries need the home directory.
+            return (Path.home() if home is None else Path(home)) / entry[2:]
         match = VARIABLE.match(entry)
         if match:
             return self.variable_dir(match.group(1)) / (match.group(2) or '')
