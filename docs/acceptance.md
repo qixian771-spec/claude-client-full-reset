@@ -15,8 +15,9 @@
 | macOS 原生（runner） | smoke（路径、进程、检测、凭证）与浏览器只读预览通过 |
 | macOS 本机 | 检测 `installed`、退出 0；钥匙串凭证项存在（只查属性）；浏览器扫描在 Chromium 部分完成，读 Safari `History.db` 因宿主无“完全磁盘访问权限”被拒，按设计退出 2 |
 | Windows 实机 | Windows 10 专业工作站版 19045 x64、Python 3.11、提交 `3d88ec7` 经 SSH 部署到临时目录（SHA-256 核对一致）。环境检测退出 0：`installed`，识别 MSIX 包 `Claude_pzs8sxrjxfjjc` 及包内 `LocalCache\Roaming\Claude(-3p)`、PATH 上 npm 安装的 `claude.cmd`、2 个未归类项、1 个含自动记忆的项目，无 issues。后台 9 个 `msedge.exe` 阻止扫描（经用户同意强制结束）后，完整只读扫描 95 秒完成、退出 1：客户端数据 13、浏览器 36（Chrome 3、Edge 33，含 SQLite、LevelDB、IndexedDB、缓存），编辑器、系统目录、shell 与注册表变量名均 CLEAR |
+| macOS 本机（终端，完全磁盘访问） | 提交 `72f1148`，浏览器已退出，在已授予“完全磁盘访问权限”的 Terminal.app 中运行 `scan_readonly.py`：退出 1、无报错；客户端数据 17、编辑器 2（Code/Cursor state.vscdb）、系统指定目录 1（`~/Applications` 中的 Claude Code URL Handler）、shell CLEAR、浏览器 87（Chrome 8 个 profile 85、Safari History.db 与 RecentlyClosedTabs.plist）。同一命令在 Claude App 内置终端运行时因宿主没有该权限读 `~/.Trash` 被拒、退出 2，符合设计 |
 
-未验证：本机在有完全磁盘访问权限的终端里的完整扫描。所有写入类测试只在临时夹具或 runner 的一次性数据上进行。
+全部验收项均已实际执行。所有写入类测试只在临时夹具或 runner 的一次性数据上进行。
 
 # 0.2.0 环境检测验收
 
