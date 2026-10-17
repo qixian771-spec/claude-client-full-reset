@@ -27,8 +27,9 @@ def run(args):
 
 
 def utf8_stdio():
-    # Redirected output otherwise uses the locale code page on Windows.
-    for stream in (sys.stdout, sys.stderr):
+    # Redirected streams otherwise use the locale code page on Windows; a
+    # piped "是" was read as mojibake and (safely) treated as no confirmation.
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
         if isinstance(stream, io.TextIOWrapper):
             stream.reconfigure(encoding='utf-8')
 

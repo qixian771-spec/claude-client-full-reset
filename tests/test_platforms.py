@@ -114,6 +114,15 @@ class EncodingTests(unittest.TestCase):
             stream.flush()
         self.assertEqual(raw.getvalue().decode('utf-8'), '中文输出\n')
 
+    def test_cli_reads_piped_input_as_utf8(self):
+        stdin = io.TextIOWrapper(io.BytesIO('是\n'.encode('utf-8')), encoding='cp1252')
+        def main():
+            return 0 if input() == '是' else 1
+        with patch.object(sys, 'stdin', stdin), \
+                patch.object(sys, 'stdout', io.TextIOWrapper(io.BytesIO(), encoding='ascii')), \
+                patch.object(sys, 'stderr', io.TextIOWrapper(io.BytesIO(), encoding='ascii')):
+            self.assertEqual(common.cli(main), 0)
+
     def test_entry_point_output_is_utf8_under_non_utf8_locale_encoding(self):
         env = dict(os.environ, PYTHONIOENCODING='ascii')
         result = subprocess.run([sys.executable, str(ROOT / 'scripts/check_environment.py'), '--help'],
