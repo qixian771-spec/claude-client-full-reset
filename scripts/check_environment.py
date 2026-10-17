@@ -18,7 +18,8 @@ LABELS = {
 }
 
 
-def executable_info(path):
+def executable_info(path, platform=None):
+    platform = platforms.current() if platform is None else platform
     path = Path(path)
     if not common.exists(path):
         return None
@@ -27,23 +28,25 @@ def executable_info(path):
     except FileNotFoundError:
         return {'path': str(path), 'usable_path': False, 'reason': '符号链接指向不存在的位置'}
     info = resolved.stat()
-    usable = stat.S_ISREG(info.st_mode) and os.access(resolved, os.X_OK)
+    usable = stat.S_ISREG(info.st_mode) and platform.is_executable(resolved, info)
     return {'path': str(path), 'usable_path': usable,
             'reason': '找到可执行路径，未运行或验证版本' if usable else '不是可执行的普通文件'}
 
 
-def command_paths(name, search_path):
+def command_paths(name, search_path, platform=None):
+    platform = platforms.current() if platform is None else platform
     found = []
-    for part in search_path.split(os.pathsep):
+    for part in search_path.split(platform.path_separator):
         directory = Path(part) if part else Path.cwd()
         # Stat explicitly: unreadable PATH locations must not become "missing".
         if not common.exists(directory):
             continue
         if not stat.S_ISDIR(directory.stat().st_mode):
             raise ValueError(f'PATH 项不是目录: {directory}')
-        entry = executable_info(directory / name)
-        if entry is not None and entry['path'] not in {item['path'] for item in found}:
-            found.append(entry)
+        for candidate in platform.executable_names(name):
+            entry = executable_info(directory / candidate, platform)
+            if entry is not None and Path(entry['path']) not in {Path(item['path']) for item in found}:
+                found.append(entry)
     return found
 
 
@@ -55,6 +58,10 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
     cli_paths = platform.resolve_all(platform.cli_candidates, home) if cli_paths is None else cli_paths
     issues = []
     desktop = []
+    if platform.key == 'win32':
+        packages = [path for path in app_paths if path.name.lower().startswith('claude_')]
+        if len(packages) > 1:
+            issues.append({'reason': f'发现 {len(packages)} 个 Claude MSIX 包目录，需人工确认哪个在用'})
     for path in map(Path, app_paths):
         if common.exists(path):
             if common.is_link(path):
@@ -63,12 +70,12 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
                 desktop.append(str(path))
             else:
                 issues.append({'path': str(path), 'reason': '应用路径存在但不是目录'})
-    cli = command_paths('claude', search_path)
+    cli = command_paths('claude', search_path, platform)
     for entry in cli:
         entry['on_path'] = True
     for path in cli_paths:
-        entry = executable_info(path)
-        if entry is not None and entry['path'] not in {item['path'] for item in cli}:
+        entry = executable_info(path, platform)
+        if entry is not None and Path(entry['path']) not in {Path(item['path']) for item in cli}:
             entry['on_path'] = False
             cli.append(entry)
     issues.extend({'path': item['path'], 'reason': item['reason']} for item in cli if not item['usable_path'])
@@ -96,7 +103,10 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
     claude_running = sum(platform.is_claude_process(proc) for proc in processes)
     if claude_running and not (desktop or active_cli):
         issues.append({'reason': '发现 Claude 进程但常见位置无安装路径，可能位于自定义位置'})
-    tools = {name: command_paths(name, search_path) for name in platform.tools}
+    registered = platform.registered_apps()
+    if registered and not (desktop or active_cli):
+        issues.append({'reason': '系统登记了 Claude 相关安装项，但常见位置未发现安装路径，可能位于自定义位置'})
+    tools = {name: command_paths(name, search_path, platform) for name in platform.tools}
     issues.extend({'path': item['path'], 'reason': name + ': ' + item['reason']}
                   for name, paths in tools.items() for item in paths if not item['usable_path'])
     python_ok = sys.version_info >= (3, 10)
@@ -125,14 +135,14 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
     return {
         'schema_version': 1, 'platform': sys.platform, 'status': status, 'label': LABELS[status],
         'desktop_paths': desktop, 'cli_candidates': cli, 'local_paths': local,
-        'skill_present': skill_present, 'related_process_count': related,
+        'skill_present': skill_present, 'registered_apps': registered, 'related_process_count': related,
         'claude_process_count': claude_running, 'issues': issues,
         'python': {'version': '.'.join(map(str, sys.version_info[:3])), 'supported': python_ok},
         'tools': tools, 'missing_base_tools': missing, 'next_steps': next_steps,
         'account_status': 'not_checked', 'prior_use': 'not_determinable',
         'scope': ['只查常见安装路径、PATH、已列本地位置和进程；不启动 Claude，不联网，不安装或修改设置。',
                   '找到路径不等于安装完整或可登录；不执行命令验证 Claude、Git、Node 或 npm 版本。',
-                  '未检查浏览器使用记录、钥匙串、云端、其他用户、自定义安装和数据目录；未发现不代表从未安装或使用。',
+                  '未检查浏览器使用记录、钥匙串/凭据管理器、云端、其他用户、自定义安装和数据目录；未发现不代表从未安装或使用。',
                   '不查询账号状态；重装或本地清理不能作为账号限制已解除的证明。'],
     }
 
@@ -154,6 +164,8 @@ def main():
             print(f'[CLI 路径] {item["path"]}；在 PATH={item["on_path"]}；{item["reason"]}')
         for path in report['local_paths']:
             print('[本地数据/配置] ' + path)
+        for name in report['registered_apps']:
+            print('[系统登记] ' + name)
         for name, paths in report['tools'].items():
             state = '发现可执行路径，版本未验证' if any(p['usable_path'] for p in paths) else '未找到可执行路径'
             print(f'[依赖] {name}: {state}')

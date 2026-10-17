@@ -17,6 +17,7 @@ import unittest
 from unittest.mock import patch
 
 from test_workflows import BS, backup, common, platforms, trash, verify
+import check_environment as env
 import winplat
 
 WIN = platforms.WINDOWS
@@ -472,7 +473,8 @@ class WindowsRecycleTests(WindowsFixture):
 
     def test_apply_dispatches_to_recycle_bin_after_backup_check(self):
         target = self.target().parent.parent
-        with patch.object(common, 'process_list', return_value=[]), contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(common, 'process_list', return_value=[]), contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()):
             folder = backup.create_backup(self.home.parent)
         with patch.object(common, 'process_list', return_value=[]), \
                 patch.object(winplat, 'recycle', side_effect=lambda p: shutil.rmtree(p)) as recycle, \
@@ -495,6 +497,145 @@ class NativeWindowsRecycleTests(unittest.TestCase):
             winplat.recycle(folder)
             self.assertFalse(single.exists())
             self.assertFalse(folder.exists())
+            listing = subprocess.run(
+                [winplat.powershell(), '-NoProfile', '-NonInteractive', '-Command',
+                 '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; '
+                 '(New-Object -ComObject Shell.Application).NameSpace(10).Items() | ForEach-Object { $_.Name }'],
+                capture_output=True, text=True, encoding='utf-8', check=True, timeout=60).stdout.splitlines()
+            self.assertIn('claude-file.txt', listing, 'file must be in the Recycle Bin, not deleted')
+            self.assertIn('claude-fixture', listing, 'folder must be in the Recycle Bin, not deleted')
+
+
+class WindowsEnvironmentTests(WindowsFixture):
+    def setUp(self):
+        super().setUp()
+        self.bin = self.home / 'bin'
+        self.bin.mkdir()
+        for name in ('powershell.exe', 'git.exe', 'node.exe', 'npm.cmd'):
+            self.file(self.bin / name, 'MUST-NOT-EXECUTE')
+        self.registered = []
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        stack.enter_context(patch.dict(os.environ, {'PATHEXT': '.COM;.EXE;.BAT;.CMD'}))
+        stack.enter_context(patch.object(common, 'process_list', return_value=[]))
+        stack.enter_context(patch.object(winplat, 'uninstall_names', side_effect=lambda: self.registered))
+        stack.enter_context(patch.object(common, 'run', side_effect=AssertionError('must not execute commands')))
+
+    def collect(self):
+        return env.collect(self.home, str(self.bin))
+
+    def test_new_machine_not_detected(self):
+        report = self.collect()
+        self.assertEqual(report['status'], 'not_detected')
+        self.assertEqual(report['missing_base_tools'], [])
+        self.assertEqual(report['registered_apps'], [])
+
+    def test_pathext_finds_cmd_and_ignores_extensionless_file(self):
+        self.file(self.bin / 'claude', 'not runnable on Windows')
+        self.assertEqual(env.command_paths('claude', str(self.bin), WIN), [])
+        shim = self.file(self.bin / 'claude.CMD')
+        found = env.command_paths('claude', str(self.bin), WIN)
+        self.assertEqual([(Path(item['path']).name, item['usable_path']) for item in found], [('claude.cmd', True)])
+        self.assertTrue(Path(found[0]['path']).samefile(shim))
+
+    def test_native_cli_outside_path_is_installed_with_path_guidance(self):
+        self.file(self.home / '.local/bin/claude.exe')
+        report = self.collect()
+        self.assertEqual(report['status'], 'installed')
+        self.assertFalse(report['cli_candidates'][0]['on_path'])
+        self.assertTrue(any('PATH' in step for step in report['next_steps']))
+
+    def test_msix_and_legacy_desktop_are_installation_candidates(self):
+        self.msix()
+        self.assertEqual(self.collect()['status'], 'installed')
+        self.file(self.local / 'AnthropicClaude/claude.exe')
+        self.assertEqual(len(self.collect()['desktop_paths']), 2)
+
+    def test_two_msix_packages_require_review(self):
+        self.msix('Claude_one'); self.msix('Claude_two')
+        report = self.collect()
+        self.assertEqual(report['status'], 'needs_review')
+        self.assertTrue(any('MSIX' in issue['reason'] for issue in report['issues']))
+
+    def test_registration_without_install_path_requires_review(self):
+        self.registered = ['Claude']
+        report = self.collect()
+        self.assertEqual(report['status'], 'needs_review')
+        self.assertEqual(report['registered_apps'], ['Claude'])
+
+    def test_local_data_only(self):
+        self.file(self.roaming / 'Claude/config.json')
+        self.assertEqual(self.collect()['status'], 'local_data_only')
+
+    def test_missing_powershell_is_a_base_tool_gap(self):
+        (self.bin / 'powershell.exe').unlink()
+        self.assertEqual(self.collect()['missing_base_tools'], ['powershell'])
+
+    def test_missing_pathext_and_registry_errors_propagate(self):
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.update(APPDATA=str(self.roaming), LOCALAPPDATA=str(self.local))
+            with self.assertRaisesRegex(RuntimeError, 'PATHEXT'):
+                self.collect()
+        with patch.object(winplat, 'uninstall_names', side_effect=PermissionError('denied')):
+            with self.assertRaises(PermissionError):
+                self.collect()
+
+
+class UninstallRegistry(FakeRegistry):
+    """Hive -> {subkey name -> values}; the WOW6432Node view is absent."""
+    HKEY_LOCAL_MACHINE = 'HKLM'
+
+    def __init__(self, hives):
+        super().__init__()
+        self.hives = hives
+
+    def OpenKey(self, root, path):
+        key = FakeKey()
+        if isinstance(root, FakeKey):
+            key.values = root.subkeys[path]
+        elif 'WOW6432Node' in path:
+            raise FileNotFoundError(2, 'no 32-bit view')
+        else:
+            key.subkeys = self.hives[root]
+        return key
+
+    def QueryInfoKey(self, key):
+        return (len(key.subkeys), 0, 0)
+
+    def EnumKey(self, key, index):
+        return sorted(key.subkeys)[index]
+
+    def QueryValueEx(self, key, name):
+        if name not in key.values:
+            raise FileNotFoundError(2, 'missing')
+        return key.values[name], 1
+
+
+class WindowsUninstallRegistryTests(unittest.TestCase):
+    def test_reads_matching_display_names_and_skips_missing_values(self):
+        registry = UninstallRegistry({
+            'HKCU': {'a': {'DisplayName': 'Claude'}, 'b': {}},
+            'HKLM': {'c': {'DisplayName': 'Anthropic Claude Code'}, 'd': {'DisplayName': 'Git'},
+                     'e': {'DisplayName': 'Claude'}},
+        })
+        with patch.object(winplat, '_winreg', return_value=registry):
+            self.assertEqual(winplat.uninstall_names(), ['Claude', 'Anthropic Claude Code'])
+
+    def test_unreadable_entry_propagates(self):
+        registry = UninstallRegistry({'HKCU': {'a': {}}, 'HKLM': {}})
+        registry.QueryValueEx = lambda key, name: (_ for _ in ()).throw(PermissionError('denied'))
+        with patch.object(winplat, '_winreg', return_value=registry):
+            with self.assertRaises(PermissionError):
+                winplat.uninstall_names()
+
+
+@unittest.skipUnless(sys.platform == 'win32', 'native Windows detection')
+class NativeWindowsEnvironmentTests(unittest.TestCase):
+    def test_real_detection_completes(self):
+        report = env.collect()
+        self.assertIn(report['status'], env.LABELS)
+        self.assertIsInstance(report['registered_apps'], list)
+        self.assertEqual(report['platform'], 'win32')
 
 
 def process(name, path='', command=''):

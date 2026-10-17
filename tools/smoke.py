@@ -11,6 +11,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
+import check_environment  # noqa: E402
 import common  # noqa: E402
 import verify_reset  # noqa: E402
 
@@ -32,7 +33,14 @@ def processes():
           f'browsers={len(common.relevant_processes(records, True))}')
 
 
-STAGES = {'paths': paths, 'processes': processes}
+def environment():
+    report = check_environment.collect()
+    print(f"[environment] status={report['status']}; desktop={len(report['desktop_paths'])}; "
+          f"cli={len(report['cli_candidates'])}; registered={len(report['registered_apps'])}; "
+          f"missing_base_tools={report['missing_base_tools']}; issues={len(report['issues'])}")
+
+
+STAGES = {'paths': paths, 'processes': processes, 'environment': environment}
 
 
 def main():

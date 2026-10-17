@@ -133,6 +133,18 @@ class Platform:
     def check_path_form(self, path):
         """Reject path forms the tools do not support (POSIX absolute paths are fine)."""
 
+    path_separator = ':'
+
+    def executable_names(self, name):
+        return [name]
+
+    def is_executable(self, resolved, info):
+        return os.access(resolved, os.X_OK)
+
+    def registered_apps(self):
+        """Display names of installed-app registrations (none on macOS)."""
+        return []
+
     def is_claude_process(self, proc):
         return ('/Claude.app/' in proc or Path(proc).name.startswith('Claude Helper')
                 or self.is_cli_process(proc))
@@ -152,6 +164,24 @@ class WindowsPlatform(Platform):
     def persistent_env_names(self):
         import winplat
         return winplat.user_environment_names()
+
+    path_separator = ';'
+
+    def pathext(self):
+        if 'PATHEXT' not in os.environ:
+            raise RuntimeError('环境变量 PATHEXT 未设置，无法判断可执行文件')
+        return [ext.lower() for ext in os.environ['PATHEXT'].split(';') if ext]
+
+    def executable_names(self, name):
+        return [name + ext for ext in self.pathext()]
+
+    def is_executable(self, resolved, info):
+        # Windows has no execute bit; PATH lookup goes by PATHEXT extension.
+        return resolved.suffix.lower() in self.pathext()
+
+    def registered_apps(self):
+        import winplat
+        return winplat.uninstall_names()
 
     def check_path_form(self, path):
         # Only local drive-letter paths: no UNC shares, no \\?\ device paths.

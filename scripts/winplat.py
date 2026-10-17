@@ -6,6 +6,7 @@ errors unless the caller documents them as optional.
 """
 import json
 import os
+import re
 from pathlib import Path
 
 import common
@@ -39,6 +40,31 @@ def user_environment_names():
         count = winreg.QueryInfoKey(key)[1]
         return [winreg.EnumValue(key, index)[0] for index in range(count)]
 
+
+UNINSTALL_KEYS = (('HKEY_CURRENT_USER', r'Software\Microsoft\Windows\CurrentVersion\Uninstall'),
+                  ('HKEY_LOCAL_MACHINE', r'Software\Microsoft\Windows\CurrentVersion\Uninstall'),
+                  ('HKEY_LOCAL_MACHINE', r'Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'))
+
+
+def uninstall_names():
+    """DisplayName of uninstall registrations mentioning Claude/Anthropic (read-only)."""
+    winreg = _winreg()
+    found = []
+    for root, path in UNINSTALL_KEYS:
+        try:
+            parent = winreg.OpenKey(getattr(winreg, root), path)
+        except FileNotFoundError:
+            continue  # the WOW6432Node view does not exist on 32-bit Windows
+        with parent:
+            for index in range(winreg.QueryInfoKey(parent)[0]):
+                with winreg.OpenKey(parent, winreg.EnumKey(parent, index)) as entry:
+                    try:
+                        name, _ = winreg.QueryValueEx(entry, 'DisplayName')
+                    except FileNotFoundError:
+                        continue  # many registrations have no display name
+                if isinstance(name, str) and re.search('claude|anthropic', name, re.I) and name not in found:
+                    found.append(name)
+    return found
 
 # Stop on any PowerShell error; emit UTF-8 JSON regardless of the console code page.
 PROCESS_QUERY = ("$ErrorActionPreference = 'Stop'; "
