@@ -48,6 +48,8 @@ class Platform:
     client_processes: tuple
     safari_root: object
     safari_files: tuple
+    # Firefox: read-only scan of these profile files and site-storage names.
+    firefox_profiles: str
     browser_cache: object
     editor_extensions: tuple
     editor_user_dirs: tuple
@@ -257,10 +259,12 @@ MACOS = Platform(
         ('Arc', '~/Library/Application Support/Arc/User Data'),
     ),
     browser_processes=('Google Chrome', 'Google Chrome Beta', 'Google Chrome Canary',
-                       'Microsoft Edge', 'Brave Browser', 'Vivaldi', 'Chromium', 'Arc', 'Safari'),
+                       'Microsoft Edge', 'Brave Browser', 'Vivaldi', 'Chromium', 'Arc', 'Safari',
+                       'Firefox', 'Firefox Developer Edition', 'Firefox Nightly'),
     client_processes=('Claude', 'Code', 'Cursor', 'Windsurf'),
     safari_root='~/Library/Safari',
     safari_files=('History.db', 'RecentlyClosedTabs.plist', 'Downloads.plist'),
+    firefox_profiles='~/Library/Application Support/Firefox/Profiles',
     browser_cache='~/Library/Caches/Google/Chrome',
     editor_extensions=('~/.vscode/extensions', '~/.cursor/extensions', '~/.windsurf/extensions'),
     editor_user_dirs=('~/Library/Application Support/Code/User',
@@ -319,12 +323,13 @@ WINDOWS = WindowsPlatform(
         ('Vivaldi', '%LOCALAPPDATA%/Vivaldi/User Data'),
         ('Chromium', '%LOCALAPPDATA%/Chromium/User Data'),
     ),
-    browser_processes=('chrome.exe', 'msedge.exe', 'brave.exe', 'vivaldi.exe'),
+    browser_processes=('chrome.exe', 'msedge.exe', 'brave.exe', 'vivaldi.exe', 'firefox.exe'),
     client_processes=('claude.exe', 'Code.exe', 'Cursor.exe', 'Windsurf.exe'),
     # Safari does not exist; Chromium keeps its HTTP cache inside the profile,
     # which the default profile scan already walks.
     safari_root=None,
     safari_files=(),
+    firefox_profiles='%APPDATA%/Mozilla/Firefox/Profiles',
     browser_cache=None,
     editor_extensions=MACOS.editor_extensions,
     editor_user_dirs=('%APPDATA%/Code/User', '%APPDATA%/Cursor/User', '%APPDATA%/Windsurf/User'),

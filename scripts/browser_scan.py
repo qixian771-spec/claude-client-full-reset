@@ -123,6 +123,43 @@ def scan_safari():
     return result
 
 
+FIREFOX_FILES = ('places.sqlite', 'cookies.sqlite', 'webappsstore.sqlite', 'formhistory.sqlite')
+FIREFOX_HOSTS = ('claude.ai', 'anthropic.com')
+
+
+def firefox_origin_matches(name):
+    """storage/default names look like 'https+++claude.ai' or 'https+++a.claude.ai+8443^userContextId=1'."""
+    if '+++' not in name:
+        return False
+    host = name.split('+++', 1)[1].split('^', 1)[0].split('+', 1)[0].lower()
+    return any(host == base or host.endswith('.' + base) for base in FIREFOX_HOSTS)
+
+
+def scan_firefox():
+    """Read-only: listed databases (on snapshots) and site-storage folder names."""
+    result = []
+    platform = platforms.current()
+    root = platform.resolve(platform.firefox_profiles)
+    if not common.directory(root):
+        return result
+    for profile in sorted(root.iterdir()):
+        if not common.directory(profile):
+            continue
+        for name in FIREFOX_FILES:
+            path = profile / name
+            if common.exists(path):
+                count = byte_hits(path)
+                sql = sqlite_hits(path) if _looks_sqlite(path) else []
+                if count or sql:
+                    result.append((profile.name, name, count, sql))
+        storage = profile / 'storage/default'
+        if common.directory(storage):
+            for site in sorted(storage.iterdir()):
+                if firefox_origin_matches(site.name):
+                    result.append((profile.name, 'storage/default/' + site.name, 0, []))
+    return result
+
+
 def scan_http_cache():
     count = size = 0
     platform = platforms.current()
@@ -135,13 +172,14 @@ def scan_http_cache():
 def scope_note(platform):
     parts = ['Chromium profiles 与 Local State']
     parts.append('Safari 三类文件' if platform.safari_root else 'Safari 不适用')
+    parts.append('Firefox 历史/Cookie/存储数据库与站点存储目录名（只读，不精删）')
     parts.append('--deep 加 Chrome HTTP 缓存' if platform.browser_cache
                  else 'HTTP 缓存位于 profile 内，已随 profile 扫描')
     return '；'.join(parts) + '。'
 
 
 def collect(deep=False, browsers=None):
-    result = {'chromium': [], 'safari': [], 'profiles': 0, 'files': 0, 'cache': None}
+    result = {'chromium': [], 'safari': [], 'firefox': [], 'profiles': 0, 'files': 0, 'cache': None}
     for name, root in browser_roots() if browsers is None else browsers:
         for profile, folder in iter_profiles(root):
             result['profiles'] += 1
@@ -157,6 +195,8 @@ def collect(deep=False, browsers=None):
                 result['files'] += 1
     result['safari'] = scan_safari()
     result['files'] += len(result['safari'])
+    result['firefox'] = scan_firefox()
+    result['files'] += len(result['firefox'])
     if deep and platforms.current().browser_cache is not None:
         _, count, size = scan_http_cache()
         result['cache'] = (count, size)
@@ -175,6 +215,8 @@ def main():
         print(f'[FOUND] {browser}/{profile}/{entry}: byte_matches={count}, sql_columns={len(sql)}')
     for entry, count, sql in result['safari']:
         print(f'[FOUND] Safari/{entry}: byte_matches={count}, sql_columns={len(sql)}')
+    for profile, entry, count, sql in result['firefox']:
+        print(f'[FOUND] Firefox/{profile}/{entry}: byte_matches={count}, sql_columns={len(sql)}')
     if result['cache']:
         print(f'[CACHE] matched_files={result["cache"][0]}')
     print(f'profiles={result["profiles"]}; matched_entries={result["files"]}')

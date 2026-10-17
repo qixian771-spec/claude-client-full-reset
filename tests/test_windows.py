@@ -150,6 +150,10 @@ class WindowsScanTests(WindowsFixture):
         self.assertEqual(len(found['系统指定目录']), 2)
         self.assertEqual(found['编辑器'], [str(self.roaming / 'Code/User/settings.json')])
 
+    def test_firefox_profiles_under_roaming_appdata(self):
+        (self.roaming / 'Mozilla/Firefox/Profiles/x.default/storage/default/https+++claude.ai').mkdir(parents=True)
+        self.assertEqual([entry for _, entry, _, _ in BS.scan_firefox()], ['storage/default/https+++claude.ai'])
+
     def test_browser_scan_has_no_safari_and_no_separate_cache(self):
         self.assertEqual(BS.scan_safari(), [])
         with patch.object(BS, 'browser_roots', return_value=[]):

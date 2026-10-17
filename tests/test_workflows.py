@@ -370,6 +370,50 @@ class ScanTests(Fixture):
                 self.assertEqual(verify.main(), 1)
 
 
+class FirefoxTests(Fixture):
+    def profile(self):
+        return self.home / 'Library/Application Support/Firefox/Profiles/abcd.default-release'
+
+    def test_history_and_site_storage_found_read_only(self):
+        profile = self.profile()
+        make_db(profile / 'places.sqlite', [('https://claude.ai/chat/1', 'title'), ('https://example.com', 'x')])
+        for site in ('https+++claude.ai', 'https+++console.anthropic.com^userContextId=2',
+                     'https+++notclaude.ai', 'https+++example.com', 'moz-extension+++x'):
+            (profile / 'storage/default' / site).mkdir(parents=True)
+        before = BS.byte_hits(profile / 'places.sqlite')
+        found = BS.scan_firefox()
+        entries = [entry for _, entry, _, _ in found]
+        self.assertIn('places.sqlite', entries)
+        self.assertIn('storage/default/https+++claude.ai', entries)
+        self.assertIn('storage/default/https+++console.anthropic.com^userContextId=2', entries)
+        self.assertNotIn('storage/default/https+++notclaude.ai', entries)
+        self.assertEqual(len(entries), 3)
+        self.assertEqual(BS.byte_hits(profile / 'places.sqlite'), before)
+
+    def test_clean_or_missing_firefox(self):
+        self.assertEqual(BS.scan_firefox(), [])
+        make_db(self.profile() / 'cookies.sqlite', [('https://example.com', 'x')])
+        self.assertEqual(BS.scan_firefox(), [])
+
+    def test_firefox_counts_in_verification(self):
+        make_db(self.profile() / 'places.sqlite', [('https://claude.ai', 'x')])
+        findings = verify.collect(self.home)
+        self.assertEqual(findings['浏览器'], ['Firefox/abcd.default-release/places.sqlite'])
+
+    def test_running_firefox_blocks_browser_scan(self):
+        with patch.object(common, 'process_list', return_value=['/Applications/Firefox.app/Contents/MacOS/firefox']):
+            with self.assertRaisesRegex(RuntimeError, '仍在运行'):
+                common.require_stopped(browsers_only=True)
+
+    def test_origin_matching(self):
+        for name, expected in (('https+++claude.ai', True), ('http+++claude.ai+8080', True),
+                               ('https+++a.b.anthropic.com^firstPartyDomain=x', True),
+                               ('https+++claude.ai.evil.com', False), ('https+++xclaude.ai', False),
+                               ('claude.ai', False)):
+            with self.subTest(name=name):
+                self.assertEqual(BS.firefox_origin_matches(name), expected)
+
+
 class SQLiteTests(Fixture):
     def setUp(self):
         super().setUp()

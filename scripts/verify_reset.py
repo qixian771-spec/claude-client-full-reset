@@ -71,6 +71,7 @@ def collect(home=None, deep=False, no_browser=False):
         data = browser_scan.collect(deep)
         findings['浏览器'] = [f'{b}/{p}/{f}' for b, p, f, _, _ in data['chromium']]
         findings['浏览器'] += ['Safari/' + item[0] for item in data['safari']]
+        findings['浏览器'] += [f'Firefox/{profile}/{entry}' for profile, entry, _, _ in data['firefox']]
         if data['cache'] and data['cache'][0]:
             findings['浏览器'].append(f'Chrome HTTP 缓存: {data["cache"][0]} 个文件')
     return findings

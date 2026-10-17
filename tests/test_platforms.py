@@ -57,8 +57,10 @@ class MacTableTests(unittest.TestCase):
 
     def test_process_names_match_legacy_order_and_grouping(self):
         mac = platforms.MACOS
-        self.assertEqual(mac.browser_processes + mac.client_processes, LEGACY_APP_NAMES)
-        self.assertEqual(mac.browser_processes, LEGACY_APP_NAMES[:9])
+        # 0.3.0 appends Firefox (read-only scan) after the legacy browsers.
+        self.assertEqual(mac.browser_processes[:9], LEGACY_APP_NAMES[:9])
+        self.assertEqual(mac.browser_processes[9:], ('Firefox', 'Firefox Developer Edition', 'Firefox Nightly'))
+        self.assertEqual(mac.client_processes, LEGACY_APP_NAMES[9:])
 
     def test_trace_assets_and_protected_match_legacy(self):
         mac = platforms.MACOS

@@ -11,6 +11,7 @@
 | 未归类 | `.claude` 中不属于上两类的顶层名称（例如第三方工具文件），只列名称不读内容 | 不自动处理；检测报告 `unclassified_items` 列出供人工确认 |
 | Chromium | 支持的全部浏览器根下 Default、Profile 开头或具有 Preferences/Cookies/History/Network 标记的目录，递归全部普通文件；根下 Local State | SQLite 文本中的服务域名；Local Storage LevelDB key 中的服务域名 |
 | Safari | History.db、RecentlyClosedTabs.plist、Downloads.plist | 无自动精删；已确认文件可备份后移入废纸篓 |
+| Firefox | Profiles 下各 profile 的 places/cookies/webappsstore/formhistory.sqlite（快照查询）及 storage/default 中 claude.ai、anthropic.com 站点目录名 | 只读扫描，无自动精删；具体文件需单独评估并备份 |
 | HTTP 缓存 | `--deep` 加 Chrome HTTP 缓存，不宣称其他浏览器缓存已检查 | 具体批准路径 |
 | 编辑器 | VS Code/Cursor/Windsurf 扩展名称；对应 settings.json、globalStorage/state.vscdb 内容关键词 | 不自动编辑配置或扩展注册表 |
 | 系统指定目录 | 用户与系统 DiagnosticReports；家目录 Applications、.Trash；用户 Containers、Group Containers、Application Scripts 的名称 | 家目录下明确目标；系统只允许 `/Applications/Claude.app` 及指定名称的系统诊断文件 |
