@@ -71,3 +71,82 @@ def process_records():
             raise RuntimeError('进程记录缺少名称，无法判断相关应用是否运行')
         records.append((item['Name'], item.get('ExecutablePath') or '', item.get('CommandLine') or ''))
     return records
+
+
+# SHFileOperationW constants (shellapi.h) and GetDriveTypeW result.
+FO_DELETE = 0x0003
+FOF_SILENT = 0x0004
+FOF_NOCONFIRMATION = 0x0010
+FOF_ALLOWUNDO = 0x0040
+FOF_NOERRORUI = 0x0400
+FOF_WANTNUKEWARNING = 0x4000
+RECYCLE_FLAGS = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT | FOF_WANTNUKEWARNING
+DRIVE_FIXED = 3
+BITBUCKET = r'Software\Microsoft\Windows\CurrentVersion\Explorer\BitBucket\Volume'
+
+
+class NativeShell:
+    """Thin ctypes wrapper; replaced by a fake in portable tests."""
+
+    def __init__(self):
+        import ctypes
+        from ctypes import wintypes
+
+        class SHFILEOPSTRUCTW(ctypes.Structure):
+            # shellapi.h packs this structure to 1 byte on 32-bit Windows only.
+            if ctypes.sizeof(ctypes.c_void_p) == 4:
+                _pack_ = 1
+            _fields_ = [('hwnd', wintypes.HWND), ('wFunc', wintypes.UINT),
+                        ('pFrom', wintypes.LPCWSTR), ('pTo', wintypes.LPCWSTR),
+                        ('fFlags', wintypes.WORD), ('fAnyOperationsAborted', wintypes.BOOL),
+                        ('hNameMappings', wintypes.LPVOID), ('lpszProgressTitle', wintypes.LPCWSTR)]
+
+        self.ctypes, self.wintypes, self.struct = ctypes, wintypes, SHFILEOPSTRUCTW
+        self.kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        self.shell32 = ctypes.WinDLL('shell32', use_last_error=True)
+        self.shell32.SHFileOperationW.argtypes = [ctypes.POINTER(SHFILEOPSTRUCTW)]
+        self.shell32.SHFileOperationW.restype = ctypes.c_int
+
+    def drive_type(self, root):
+        return self.kernel32.GetDriveTypeW(root)
+
+    def volume_guid(self, root):
+        buffer = self.ctypes.create_unicode_buffer(64)
+        if not self.kernel32.GetVolumeNameForVolumeMountPointW(root, buffer, len(buffer)):
+            raise OSError(self.ctypes.get_last_error(), f'无法读取卷标识: {root}')
+        # '\\?\Volume{GUID}\' -> '{GUID}'
+        return buffer.value[buffer.value.index('{'):buffer.value.index('}') + 1]
+
+    def nuke_on_delete(self, root):
+        """True when the Recycle Bin of this volume deletes permanently."""
+        winreg = _winreg()
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, BITBUCKET + '\\' + self.volume_guid(root)) as key:
+                value, _ = winreg.QueryValueEx(key, 'NukeOnDelete')
+        except FileNotFoundError:
+            # No per-volume entry: Windows uses its default, which recycles.
+            return False
+        return bool(value)
+
+    def delete_to_recycle_bin(self, path):
+        operation = self.struct(None, FO_DELETE, str(path) + '\0', None, RECYCLE_FLAGS, False, None, None)
+        code = self.shell32.SHFileOperationW(self.ctypes.byref(operation))
+        return code, bool(operation.fAnyOperationsAborted)
+
+
+def recycle(path, shell=None):
+    """Move one approved path to the Recycle Bin; anything that could delete permanently stops."""
+    shell = NativeShell() if shell is None else shell
+    path = Path(path)
+    root = path.anchor
+    if shell.drive_type(root) != DRIVE_FIXED:
+        raise RuntimeError(f'只支持本地固定磁盘上的回收站（可移动盘或网络盘会永久删除）: {path}')
+    if shell.nuke_on_delete(root):
+        raise RuntimeError(f'该磁盘的回收站设置为“直接删除”，拒绝操作: {root}')
+    code, aborted = shell.delete_to_recycle_bin(path)
+    if code != 0:
+        raise RuntimeError(f'移入回收站失败（SHFileOperation 代码 {code:#x}）: {path}')
+    if aborted:
+        raise RuntimeError(f'移入回收站被取消，目标未处理: {path}')
+    if common.exists(path):
+        raise RuntimeError(f'回收站操作返回后目标仍存在: {path}')

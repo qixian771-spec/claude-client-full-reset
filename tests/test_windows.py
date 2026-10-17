@@ -334,7 +334,9 @@ class WindowsBackupTests(WindowsFixture):
         self.addCleanup(context.stop)
 
     def backup(self):
-        with contextlib.redirect_stdout(io.StringIO()):
+        # The fixture profile sits beside the backup parent, so the
+        # outside-profile notice is expected; it has its own test.
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             return backup.create_backup(self.dest)
 
     def test_backup_verify_and_partial_restore_round_trip(self):
@@ -412,9 +414,87 @@ class WindowsBackupTests(WindowsFixture):
 
     def test_backup_outside_profile_warns_about_permissions(self):
         self.file(self.home / '.claude.json')
-        with contextlib.redirect_stderr(io.StringIO()) as err:
-            self.backup()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+            backup.create_backup(self.dest)
         self.assertIn('用户目录之外', err.getvalue())
+
+
+class FakeShell:
+    def __init__(self, drive=winplat.DRIVE_FIXED, nuke=False, code=0, aborted=False, remove=True):
+        self.drive, self.nuke, self.code, self.aborted, self.remove = drive, nuke, code, aborted, remove
+        self.deleted = []
+
+    def drive_type(self, root):
+        return self.drive
+
+    def nuke_on_delete(self, root):
+        return self.nuke
+
+    def delete_to_recycle_bin(self, path):
+        self.deleted.append(path)
+        if self.remove:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        return self.code, self.aborted
+
+
+class WindowsRecycleTests(WindowsFixture):
+    def target(self):
+        return self.file(self.roaming / 'Claude/logs/main.log')
+
+    def test_success_requires_target_gone(self):
+        path, shell = self.target(), FakeShell()
+        winplat.recycle(path, shell)
+        self.assertEqual(shell.deleted, [path])
+        self.assertFalse(path.exists())
+
+    def test_refusals_happen_before_any_operation(self):
+        for shell, message in ((FakeShell(drive=2), '固定磁盘'), (FakeShell(drive=4), '固定磁盘'),
+                               (FakeShell(nuke=True), '直接删除')):
+            path = self.target()
+            with self.subTest(message=message), self.assertRaisesRegex(RuntimeError, message):
+                winplat.recycle(path, shell)
+            self.assertEqual(shell.deleted, [])
+            self.assertTrue(path.exists())
+
+    def test_failure_cancel_or_leftover_is_an_error(self):
+        for shell, message in ((FakeShell(code=0x78, remove=False), '代码 0x78'),
+                               (FakeShell(aborted=True, remove=False), '取消'),
+                               (FakeShell(remove=False), '仍存在')):
+            with self.subTest(message=message), self.assertRaisesRegex(RuntimeError, message):
+                winplat.recycle(self.target(), shell)
+
+    def test_flags_allow_undo_and_warn_before_permanent_delete(self):
+        self.assertTrue(winplat.RECYCLE_FLAGS & winplat.FOF_ALLOWUNDO)
+        self.assertTrue(winplat.RECYCLE_FLAGS & winplat.FOF_WANTNUKEWARNING)
+
+    def test_apply_dispatches_to_recycle_bin_after_backup_check(self):
+        target = self.target().parent.parent
+        with patch.object(common, 'process_list', return_value=[]), contextlib.redirect_stdout(io.StringIO()):
+            folder = backup.create_backup(self.home.parent)
+        with patch.object(common, 'process_list', return_value=[]), \
+                patch.object(winplat, 'recycle', side_effect=lambda p: shutil.rmtree(p)) as recycle, \
+                patch.object(trash, 'finder_trash', side_effect=AssertionError('no Finder on Windows')), \
+                contextlib.redirect_stdout(io.StringIO()):
+            trash.execute([str(target)], apply=True, backup_dir=folder)
+        recycle.assert_called_once_with(target)
+
+
+@unittest.skipUnless(sys.platform == 'win32', 'native Windows Recycle Bin')
+class NativeWindowsRecycleTests(unittest.TestCase):
+    def test_disposable_file_and_folder_go_to_recycle_bin(self):
+        with tempfile.TemporaryDirectory(prefix='reset-recycle-') as temp:
+            folder = Path(temp).resolve() / 'claude-fixture'
+            (folder / 'nested').mkdir(parents=True)
+            (folder / 'nested/a.txt').write_text('a', encoding='utf-8')
+            single = Path(temp).resolve() / 'claude-file.txt'
+            single.write_text('b', encoding='utf-8')
+            winplat.recycle(single)
+            winplat.recycle(folder)
+            self.assertFalse(single.exists())
+            self.assertFalse(folder.exists())
 
 
 def process(name, path='', command=''):

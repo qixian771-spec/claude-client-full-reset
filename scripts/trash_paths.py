@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Preview or move approved, backed-up ordinary paths to Finder Trash."""
+"""Preview or move approved, backed-up ordinary paths to the Trash (macOS) or Recycle Bin (Windows)."""
 import argparse
 from pathlib import Path
 import sys
@@ -48,6 +48,14 @@ def finder_trash(path):
         raise RuntimeError(f'Finder 返回后目标仍存在: {path}')
 
 
+def move_to_trash(path):
+    if platforms.current().key == 'win32':
+        import winplat  # deferred: Windows-only module
+        winplat.recycle(path)
+    else:
+        finder_trash(path)
+
+
 def execute(paths, apply=False, backup_dir=None):
     if not paths or len(paths) > 10:
         raise ValueError('每次需要 1–10 个明确路径')
@@ -68,7 +76,7 @@ def execute(paths, apply=False, backup_dir=None):
             common.require_stopped()
             validate_path(str(path))
             backup.require_covered(backup_dir, path)
-            finder_trash(path)
+            move_to_trash(path)
         print(f'[{"OK" if apply else "DRY"}] {path}')
     return 0
 
