@@ -1,8 +1,8 @@
 {
   "name": "claude-client-full-reset",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "macOS Claude client local-data inspection and reset skill",
+  "description": "macOS and Windows Claude client local-data inspection and reset skill",
   "license": "MIT",
   "engines": {
     "node": ">=18"

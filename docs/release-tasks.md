@@ -53,3 +53,27 @@
 | D3 交付 | 14 个情景路线审阅、文档打包及链接检查；提交 GitHub 并核对 CI | 本地文档验收通过；发布与 CI 结果见本次提交及 Actions |
 
 本次仅修改文档。14 个情景按手册分支人工推演，对照实际参数和退出码核查；不是独立 AI 或真实账号端到端测试。结构/语法检查、skill 元数据检查、2 项安装测试（含安装后入口与 Markdown 相对链接）通过。完整自动测试由本次提交的 GitHub Actions 再执行；没有启动 Claude、操作真实客户端数据或修改代理/防火墙。
+
+## 0.3.0 Windows 适配与整体改进任务卡
+
+方案：平台差异集中到 `scripts/platforms.py`（Windows 专属的注册表、进程、回收站在 `scripts/winplat.py`），macOS 行为不变；Windows 10/11 支持检测、扫描、备份、移入回收站、恢复、SQLite/LevelDB 精删与验收；按官方文档重分 `.claude` 痕迹与资产；新增凭证位置存在性检测、Firefox 只读扫描。在功能分支 `feat/windows-support` 上逐卡提交并推送，GitHub Actions 的 Windows 结果作为原生证据。
+
+| 任务 | 验收标准 | 状态 |
+| --- | --- | --- |
+| T1 平台模块 | macOS 表与旧常量逐项一致；本机检测输出与重构前相同 | 通过；Linux `--help` 回归已修复 |
+| T2 显式 UTF-8 | 文本读写全部指定编码；`check.py` 静态拦截；非 UTF-8 输出编码下入口可用 | 通过 |
+| T3 Windows 进程 | 系统 PowerShell CIM 查询；失败/非 JSON 报错且不回显；真实查询能看到自身 | 通过（Windows 原生测试） |
+| T4 Windows 路径表 | 用户目录、AppData、MSIX、文档文件夹（注册表）、浏览器、编辑器、PowerShell profile、`HKCU\Environment` 变量名 | 通过（Windows 原生 smoke） |
+| T5 路径安全 | junction/重解析点即链接；拒绝 UNC 与设备路径；保护清单；MSIX 只允许 Claude 数据子目录 | 通过（原生 `mklink /J` 测试）；修复了 `%VAR%` 单独条目失效的问题 |
+| T6 备份/恢复复制 | Windows 严格复制、不合并不覆盖；清单记录平台，跨平台拒绝 | 通过（Windows 原生往返） |
+| T7 回收站 | 仅本地固定磁盘；直接删除的回收站拒绝；失败/取消/残留报错 | 通过（原生测试核对回收站中的原始位置） |
+| T8 环境检测 | PATHEXT、MSIX/旧版 Desktop、WinGet/npm、卸载项名称、PowerShell 基础依赖 | 通过 |
+| T9 LevelDB 跨平台 | 浏览器根目录只在 Python 定义；Python 启动器明确（`py -3` / `CLAUDE_RESET_PYTHON`） | 通过；按确认的规则把未建成的库判为 `[EMPTY]` |
+| T10 `.claude` 分类 | 依官方 Application data 分痕迹/资产；未知名称单列不再强制 needs_review（契约变更）；自动记忆提示；版本目录；卸载判定统一 | 通过 |
+| T11 凭证位置 | 只报存在与否；钥匙串仅查属性；`CLAUDE_CONFIG_DIR` 需审阅 | 通过 |
+| T12 Firefox | 数据库快照查询与站点存储目录名，只读不精删 | 通过 |
+| T13 文档 | SKILL、README、各参考文档补 Windows 与新字段 | 通过（链接检查） |
+| T14 发布记录 | 版本 0.3.0；本表与验收报告 | 本提交 |
+| T15 macOS 进程误判 | `.app` 内独立扩展与 XPC 服务不算应用在运行 | 通过（macOS runner 原生预览） |
+
+执行中由老公确认的追加决定：功能分支逐卡推送跑 CI；LevelDB 无 `CURRENT` 时按记录文件判定空库；新增 T15。

@@ -1,3 +1,22 @@
+# 0.3.0 Windows 适配验收
+
+- macOS 与 Windows 10/11 共用同一套规则；平台差异只在 `scripts/platforms.py` 与 `scripts/winplat.py`。
+- Windows：系统 PowerShell 查询进程；严格复制备份/恢复；本地固定磁盘回收站；junction、重解析点、UNC 一律拒绝；MSIX 数据只允许处理 `LocalCache\Roaming\Claude(-3p)`。
+- 两平台：官方文档分类的 `.claude` 痕迹/资产、`unclassified_items`、自动记忆提示、凭证位置存在性、`CLAUDE_CONFIG_DIR` 提示、Firefox 只读扫描；macOS 不再把 `.app` 内独立扩展/XPC 当作应用在运行。
+
+## 测试与验收
+
+| 验收项 | 结果 |
+| --- | --- |
+| Python（macOS 本地） | 174 项通过，6 项为 Windows 原生测试在 macOS 跳过 |
+| JavaScript | 16 项通过 |
+| GitHub Actions | ubuntu-24.04、macos-14（Py 3.10/3.12）、windows-2022（Py 3.10/3.12，Node 18/22）全部通过 |
+| Windows 原生 | 进程查询、junction 拒绝、UNC/设备路径拒绝、大小写变体拒绝、回收站（核对原始位置）、真实环境检测；smoke 与浏览器只读预览在 runner 自己的 profile 上通过，并实测到一次 `[EMPTY]` |
+| macOS 原生（runner） | smoke（路径、进程、检测、凭证）与浏览器只读预览通过 |
+| macOS 本机 | 检测 `installed`、退出 0；钥匙串凭证项存在（只查属性）；浏览器扫描在 Chromium 部分完成，读 Safari `History.db` 因宿主无“完全磁盘访问权限”被拒，按设计退出 2 |
+
+未验证：Windows 实机（非 CI）上的只读检测；本机在有完全磁盘访问权限的终端里的完整扫描。所有写入类测试只在临时夹具或 runner 的一次性数据上进行。
+
 # 0.2.0 环境检测验收
 
 - 新增 `scripts/check_environment.py`：常见 Desktop/CLI 候选路径、本地配置/数据位置、命令依赖路径和进程数量；支持文本及 JSON。
