@@ -157,11 +157,17 @@ async function main() {
   }
   console.log(`matched_directories=${plan.length}; logical key deletion only, no forensic-erasure claim`);
 }
-module.exports = { purgeDir, operate, inventory, iterProfiles, requireStopped, browserRoots, pythonCommand, main };
+// Do not print database keys, values or captured subprocess stdout/stderr:
+// first lines only. LevelDB causes carry a status and file path, which
+// explain why a database could not be opened.
+function formatError(error) {
+  const line = item => (item.code ? item.code + ': ' : '') + String(item.message).split('\n')[0];
+  return '[ERROR] ' + line(error) + (error.cause instanceof Error ? ' (cause: ' + line(error.cause) + ')' : '');
+}
+module.exports = { purgeDir, operate, inventory, iterProfiles, requireStopped, browserRoots, pythonCommand, formatError, main };
 if (require.main === module) {
   main().catch(error => {
-    // Do not print database keys, values or captured subprocess stdout/stderr.
-    console.error('[ERROR] ' + (error.code ? error.code + ': ' : '') + error.message.split('\n')[0]);
+    console.error(formatError(error));
     process.exitCode = 2;
   });
 }

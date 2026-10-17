@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { ClassicLevel } = require('classic-level');
-const { purgeDir, operate, inventory, requireStopped, iterProfiles, browserRoots, pythonCommand } = require('../scripts/ls_purge');
+const { purgeDir, operate, inventory, requireStopped, iterProfiles, browserRoots, pythonCommand, formatError } = require('../scripts/ls_purge');
 
 async function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reset-level-test-'));
@@ -116,4 +116,12 @@ test('browser roots come from the Python platform table and are validated', () =
 test('no browser paths are hard-coded in the Node script', () => {
   const source = fs.readFileSync(path.join(__dirname, '../scripts/ls_purge.js'), 'utf8');
   assert.doesNotMatch(source, /Application Support|User Data|Google\/Chrome|BraveSoftware/);
+});
+test('errors show the LevelDB cause but only first lines', () => {
+  const cause = Object.assign(new Error('IO error: C:\\db\\LOCK: busy\nkey=secret'), { code: 'LEVEL_IO_ERROR' });
+  const error = Object.assign(new Error('Database failed to open\nvalue=secret', { cause }), { code: 'LEVEL_DATABASE_NOT_OPEN' });
+  const text = formatError(error);
+  assert.match(text, /LEVEL_DATABASE_NOT_OPEN: Database failed to open \(cause: LEVEL_IO_ERROR: IO error: .*LOCK: busy\)/);
+  assert.doesNotMatch(text, /secret/);
+  assert.equal(formatError(new Error('plain')), '[ERROR] plain');
 });
