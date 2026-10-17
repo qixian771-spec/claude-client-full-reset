@@ -1,3 +1,16 @@
+# 0.4.0 M5「傻瓜式体验」验收
+
+| 验收项 | 结果 |
+| --- | --- |
+| 自动测试（macOS 本地） | Python 208 项通过（8 项为其他平台原生测试跳过）；JavaScript 18 项通过 |
+| GitHub Actions | ubuntu-24.04、macos-14（Py 3.10/3.12）、windows-2022（Py 3.10/3.12，Node 18/22）全部通过 |
+| T16 本机真实运行 | 内置终端扫描：退出 2 + 完全磁盘访问权限的下一步；Claude 运行时 SQLite/LevelDB 预览：退出 2 + 应用名清单与退出方法（Node 侧转述同一提示） |
+| T17 原生 | macOS/Windows runner 6 项全 ✅；本机如实报应用在运行、缺完全磁盘访问权限，估算默认备份约 13.6 GB；Windows 实机 6 项全 ✅、退出 0 |
+| T18 原生 | Windows runner：生成的 `.cmd` 真实运行，确认后备份并只把目标移入回收站（退出 0），取消时不写任何东西（退出 3）；macOS runner：用户目录名含引号、空格、`$`、中文时 `.command` 正确运行到取消；Windows 实机：生成交接文件并跑取消分支，目标哈希不变、无备份目录、启动器退出 3 |
+| T19 | 对话模板覆盖全部路线；21 个情景文档推演 |
+
+未验证：macOS 上“确认后真正移入废纸篓”的交接全流程只有单元测试（CI runner 上 Finder 自动化需要授权；底层 Finder 移动在 0.1.0 已做本机原生验收）；没有让独立 AI 按对话模板实际执行一遍；没有在真实用户数据上运行确认分支。
+
 # 0.3.0 Windows 适配验收
 
 - macOS 与 Windows 10/11 共用同一套规则；平台差异只在 `scripts/platforms.py` 与 `scripts/winplat.py`。
