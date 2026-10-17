@@ -11,7 +11,6 @@ import platforms
 
 PAT = re.compile(r'claude|anthropic', re.I)
 ENV_PAT = re.compile(r'^(ANTHROPIC|CLAUDE|HEADROOM)[A-Z_]*$')
-RC_PATTERN = re.compile(r'^\s*(?:export\s+)?(?:ANTHROPIC|CLAUDE|HEADROOM)[A-Z_]*=|^\s*alias\s+claude=')
 
 
 def core_paths(home):
@@ -24,16 +23,17 @@ def core_paths(home):
 
 
 def shell_findings(home):
+    platform = platforms.current()
     result = []
-    for name in platforms.current().shell_files:
-        path = home / name
+    for path in platform.resolve_all(platform.shell_files, home):
         if common.exists(path):
             common.regular(path)
             for index, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
-                if RC_PATTERN.search(line):
+                if platform.shell_pattern.search(line):
                     result.append(f'{path}:{index}')
     # No startup files are executed. Only names, never environment values.
     result += ['current-env:' + key for key in os.environ if ENV_PAT.fullmatch(key)]
+    result += ['user-env:' + key for key in platform.persistent_env_names() if ENV_PAT.fullmatch(key.upper())]
     return result
 
 
@@ -99,7 +99,7 @@ def main():
     common.require_stopped()
     if args.uninstalled:
         import shutil
-        if any(common.exists(path) for path in platform.resolve_all(platform.desktop_apps)) or shutil.which('claude'):
+        if any(common.exists(path) for path in platform.expand_all(platform.desktop_apps)) or shutil.which('claude'):
             raise RuntimeError('卸载验收前提不满足：仍有 Claude 安装')
     total = report(collect(deep=args.deep), args.quiet)
     print('PASS：所列范围未见命中（不等于全盘擦除）' if not total else 'REVIEW：仍有命中项，需逐项判断')

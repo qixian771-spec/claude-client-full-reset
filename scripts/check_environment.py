@@ -51,7 +51,7 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
     platform = platforms.current()
     home = Path.home() if home is None else Path(home)
     search_path = os.environ.get('PATH', os.defpath) if search_path is None else search_path
-    app_paths = platform.resolve_all(platform.desktop_apps, home) if app_paths is None else app_paths
+    app_paths = platform.expand_all(platform.desktop_apps, home) if app_paths is None else app_paths
     cli_paths = platform.resolve_all(platform.cli_candidates, home) if cli_paths is None else cli_paths
     issues = []
     desktop = []

@@ -59,8 +59,7 @@ def create_backup(dest, extra=()):
     dest = Path(dest).resolve(strict=True)
     if not dest.is_dir():
         raise ValueError('备份父目录必须已存在')
-    sources = [(platform.resolve(src, home), name) for src, name in platform.core()
-               if common.exists(platform.resolve(src, home))]
+    sources = [(src, name) for src, name in platform.core(home) if common.exists(src)]
     for index, item in enumerate(extra):
         src = absolute_path(item)
         no_symlink_parents(src)

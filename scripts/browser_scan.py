@@ -108,6 +108,8 @@ def scan_profile(root):
 def scan_safari():
     result = []
     platform = platforms.current()
+    if platform.safari_root is None:
+        return result
     root = platform.resolve(platform.safari_root)
     if common.directory(root):
         for name in platform.safari_files:
@@ -129,6 +131,14 @@ def scan_http_cache():
     return [], count, size
 
 
+def scope_note(platform):
+    parts = ['Chromium profiles 与 Local State']
+    parts.append('Safari 三类文件' if platform.safari_root else 'Safari 不适用')
+    parts.append('--deep 加 Chrome HTTP 缓存' if platform.browser_cache
+                 else 'HTTP 缓存位于 profile 内，已随 profile 扫描')
+    return '；'.join(parts) + '。'
+
+
 def collect(deep=False, browsers=None):
     result = {'chromium': [], 'safari': [], 'profiles': 0, 'files': 0, 'cache': None}
     for name, root in browser_roots() if browsers is None else browsers:
@@ -146,7 +156,7 @@ def collect(deep=False, browsers=None):
                 result['files'] += 1
     result['safari'] = scan_safari()
     result['files'] += len(result['safari'])
-    if deep:
+    if deep and platforms.current().browser_cache is not None:
         _, count, size = scan_http_cache()
         result['cache'] = (count, size)
         result['files'] += count
@@ -167,7 +177,7 @@ def main():
     if result['cache']:
         print(f'[CACHE] matched_files={result["cache"][0]}')
     print(f'profiles={result["profiles"]}; matched_entries={result["files"]}')
-    print('范围：Chromium profiles 与 Local State；Safari 三类文件；--deep 加 Chrome HTTP 缓存。')
+    print('范围：' + scope_note(platforms.current()))
     return 1 if result['files'] else 0
 
 

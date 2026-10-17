@@ -47,7 +47,7 @@ class MacTableTests(unittest.TestCase):
 
     def test_core_matches_legacy_backup_list(self):
         mac = platforms.MACOS
-        self.assertEqual([(mac.resolve(src, self.home), name) for src, name in mac.core()],
+        self.assertEqual(mac.core(self.home),
                          [(self.home / src, name) for src, name in LEGACY_CORE])
 
     def test_browser_roots_match_legacy(self):
