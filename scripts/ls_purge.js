@@ -80,20 +80,21 @@ function iterProfiles(root) {
       ? [[name, folder]] : [];
   });
 }
-// LevelDB data: numbered tables/logs, manifests and temporary manifest files.
-const DATA_FILE = /^(?:\d+\.(?:ldb|log|sst|dbtmp)|MANIFEST-\d+)$/;
-// A browser may create the directory before writing any data. Only a
-// directory with neither CURRENT nor any data file counts as empty; data
-// without CURRENT may be damaged and stops the run.
+// Only numbered tables (.ldb/.sst) and write-ahead logs (.log) hold records.
+const RECORD_FILE = /^\d+\.(?:ldb|sst|log)$/;
+// LevelDB writes MANIFEST-000001 before CURRENT when it creates a database,
+// and treats a directory without CURRENT as "does not exist". A browser can
+// leave the directory unused or stop mid-creation (seen with Edge on
+// Windows). Without CURRENT and without any record file there are no keys:
+// report it as empty. Record files without CURRENT may be damage and stop.
 function levelState(dir) {
   const names = fs.readdirSync(dir).sort();
-  if (names.includes('CURRENT')) return 'database';
-  const data = names.filter(name => DATA_FILE.test(name));
-  if (data.length) {
-    throw new Error('LevelDB has data files but no CURRENT; possibly damaged: ' + dir +
+  if (names.includes('CURRENT')) return { state: 'database', names };
+  if (names.some(name => RECORD_FILE.test(name))) {
+    throw new Error('LevelDB has record files but no CURRENT; possibly damaged: ' + dir +
       ' (files: ' + names.join(', ') + ')');
   }
-  return 'empty';
+  return { state: 'empty', names };
 }
 async function operate(dir, apply, Database = loadDatabase()) {
   const db = new Database(dir, { createIfMissing: false, keyEncoding: 'buffer', valueEncoding: 'buffer' });
@@ -154,8 +155,10 @@ async function main() {
       profiles++;
       const dir = path.join(folder, 'Local Storage/leveldb');
       if (!exists(dir)) continue;
-      if (levelState(dir) === 'empty') {
-        console.log(`[EMPTY] ${name}/${profile}: Local Storage LevelDB not initialised (no CURRENT, no data files); counted as 0, not opened`);
+      const level = levelState(dir);
+      if (level.state === 'empty') {
+        console.log(`[EMPTY] ${name}/${profile}: Local Storage LevelDB never completed creation ` +
+          `(no CURRENT, no record files; files: ${level.names.join(', ') || 'none'}); counted as 0, not opened`);
         continue;
       }
       const count = await purgeDir(dir);

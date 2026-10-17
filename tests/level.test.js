@@ -125,19 +125,22 @@ test('errors show the LevelDB cause but only first lines', () => {
   assert.doesNotMatch(text, /secret/);
   assert.equal(formatError(new Error('plain')), '[ERROR] plain');
 });
-test('directory without CURRENT is empty only when it has no data files', async t => {
+test('directory without CURRENT is empty only when it has no record files', async t => {
   const { root, dir } = await fixture(t);
-  assert.equal(levelState(dir), 'database');
-  const fresh = path.join(root, 'fresh');
-  fs.mkdirSync(fresh);
-  fs.writeFileSync(path.join(fresh, 'LOCK'), '');
-  fs.writeFileSync(path.join(fresh, 'LOG'), 'opened');
-  assert.equal(levelState(fresh), 'empty');
-  for (const name of ['000003.log', '000005.ldb', 'MANIFEST-000001', '000004.dbtmp']) {
-    const damaged = path.join(root, 'damaged-' + name);
-    fs.mkdirSync(damaged);
-    fs.writeFileSync(path.join(damaged, name), 'data');
-    assert.throws(() => levelState(damaged), /no CURRENT; possibly damaged.*files: /);
+  assert.equal(levelState(dir).state, 'database');
+  const make = (label, files) => {
+    const folder = path.join(root, label);
+    fs.mkdirSync(folder);
+    for (const name of files) fs.writeFileSync(path.join(folder, name), 'x');
+    return folder;
+  };
+  // Unused directory, and creation stopped after the manifest (Edge on Windows).
+  assert.deepEqual(levelState(make('unused', ['LOCK', 'LOG'])), { state: 'empty', names: ['LOCK', 'LOG'] });
+  assert.equal(levelState(make('half-created', ['LOCK', 'LOG', 'MANIFEST-000001'])).state, 'empty');
+  assert.equal(levelState(make('pending-current', ['MANIFEST-000001', '000002.dbtmp'])).state, 'empty');
+  for (const name of ['000003.log', '000005.ldb', '000007.sst']) {
+    assert.throws(() => levelState(make('records-' + name, ['MANIFEST-000001', name])),
+      /record files but no CURRENT; possibly damaged.*files: /);
   }
   fs.rmSync(path.join(dir, 'CURRENT'));
   assert.throws(() => levelState(dir), /possibly damaged/);
