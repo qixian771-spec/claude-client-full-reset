@@ -91,7 +91,7 @@ def create_backup(dest, extra=()):
         entries.append({'source': str(src), 'stored': name, 'entries': before})
     data = {'version': 1, 'created_at': datetime.now(timezone.utc).isoformat(),
             'home': str(home), 'sources': entries, 'payload': inventory(payload)}
-    (folder / 'manifest.json').write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+    (folder / 'manifest.json').write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     (folder / 'RESTORE.md').write_text(
         '# 备份校验与恢复\n\n在 skill 根目录执行（使用本备份目录的绝对路径）：\n\n'
         '```bash\npython3 scripts/backup.py --verify /absolute/backup-directory\n'
@@ -103,7 +103,7 @@ def create_backup(dest, extra=()):
         '恢复前退出相关应用，在独立终端执行。所选目标必须不存在；不会合并或覆盖。'
         '仍存在的配置、SQLite/LevelDB 数据不要强行覆盖；先另行备份并确认移走具体目标。'
         '复制失败会保留可能产生的不完整目标并停止，不会自动删除、重试或扩大范围。'
-        'manifest.json 记录完整 SHA-256 内容清单、目录与符号链接；不是签名或防篡改证明。\n')
+        'manifest.json 记录完整 SHA-256 内容清单、目录与符号链接；不是签名或防篡改证明。\n', encoding='utf-8')
     verify_backup(folder)
     print(f'[OK] 备份与源数据一致: {folder}')
     return folder
@@ -111,7 +111,7 @@ def create_backup(dest, extra=()):
 
 def verify_backup(folder):
     folder = Path(folder).resolve(strict=True)
-    data = json.loads((folder / 'manifest.json').read_text())
+    data = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
     if data.get('version') != 1 or not data.get('sources'):
         raise ValueError('备份清单缺失或版本无效')
     if data['home'] != str(Path.home().resolve()):

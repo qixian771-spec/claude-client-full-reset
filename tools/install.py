@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Install this skill locally without replacing an existing installation."""
 import argparse
+import io
 import os
 from pathlib import Path
 import shutil
@@ -55,6 +56,10 @@ def main():
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        # Redirected output otherwise uses the locale code page on Windows.
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding='utf-8')
     try:
         sys.exit(main())
     except (OSError, ValueError) as exc:

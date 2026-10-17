@@ -2,6 +2,7 @@
 import os
 import contextlib
 import hashlib
+import io
 import shutil
 import tempfile
 from pathlib import Path
@@ -24,7 +25,15 @@ def run(args):
     return subprocess.run(args, capture_output=True, text=True, check=True, timeout=60).stdout
 
 
+def utf8_stdio():
+    # Redirected output otherwise uses the locale code page on Windows.
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding='utf-8')
+
+
 def cli(main):
+    utf8_stdio()
     try:
         return main()
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError, sqlite3.Error) as exc:

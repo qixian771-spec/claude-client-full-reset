@@ -17,7 +17,7 @@ def main():
     path = Path.home() / '.claude.json'
     if common.exists(path):
         common.regular(path)
-        obj = json.loads(path.read_text())
+        obj = json.loads(path.read_text(encoding='utf-8'))
         if not isinstance(obj, dict):
             raise ValueError('.claude.json 必须是 JSON 对象')
         keys = [key for key in ('machineID', 'userID', 'deviceId', 'installationId') if key in obj]

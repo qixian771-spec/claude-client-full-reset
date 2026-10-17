@@ -1,9 +1,12 @@
+import io
+import os
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 from unittest.mock import patch
 
-from test_workflows import REAL_CURRENT, platforms
+from test_workflows import REAL_CURRENT, ROOT, common, platforms
 
 # Literal copies of the macOS constants before the platform table existed
 # (commit dd4e985). The table must not change macOS behaviour.
@@ -75,6 +78,26 @@ class MacTableTests(unittest.TestCase):
         with patch.object(sys, 'platform', 'sunos5'):
             with self.assertRaisesRegex(RuntimeError, '不支持的平台'):
                 REAL_CURRENT()
+
+
+class EncodingTests(unittest.TestCase):
+    def test_cli_switches_redirected_streams_to_utf8(self):
+        raw = io.BytesIO()
+        stream = io.TextIOWrapper(raw, encoding='ascii')
+        def main():
+            print('中文输出')
+            return 0
+        with patch.object(sys, 'stdout', stream), patch.object(sys, 'stderr', io.TextIOWrapper(io.BytesIO(), encoding='ascii')):
+            self.assertEqual(common.cli(main), 0)
+            stream.flush()
+        self.assertEqual(raw.getvalue().decode('utf-8'), '中文输出\n')
+
+    def test_entry_point_output_is_utf8_under_non_utf8_locale_encoding(self):
+        env = dict(os.environ, PYTHONIOENCODING='ascii')
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/check_environment.py'), '--help'],
+                                capture_output=True, env=env, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', 'replace'))
+        self.assertIn('输出结构化报告', result.stdout.decode('utf-8'))
 
 
 if __name__ == '__main__':

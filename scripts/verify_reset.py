@@ -29,7 +29,7 @@ def shell_findings(home):
         path = home / name
         if common.exists(path):
             common.regular(path)
-            for index, line in enumerate(path.read_text().splitlines(), 1):
+            for index, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
                 if RC_PATTERN.search(line):
                     result.append(f'{path}:{index}')
     # No startup files are executed. Only names, never environment values.
