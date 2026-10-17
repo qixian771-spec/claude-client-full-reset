@@ -93,6 +93,24 @@ class ProcessTests(unittest.TestCase):
         self.assertEqual(len(common.relevant_processes(procs)), 6)
         self.assertEqual(len(common.relevant_processes(procs, True)), 3)
 
+    def test_bundle_extensions_and_xpc_services_do_not_count_as_running(self):
+        safari = '/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/'
+        chrome = '/Applications/Google Chrome.app/'
+        idle = [safari + 'Contents/Extensions/SafariWidgetExtension.appex/Contents/MacOS/SafariWidgetExtension',
+                safari + 'Contents/XPCServices/com.apple.Safari.SandboxBroker.xpc/Contents/MacOS/com.apple.Safari.SandboxBroker',
+                safari + 'Contents/PlugIns/CacheDeleteExtension.appex/Contents/MacOS/CacheDeleteExtension',
+                '/Applications/Claude.app/Contents/XPCServices/x.xpc/Contents/MacOS/x']
+        running = [safari + 'Contents/MacOS/Safari',
+                   chrome + 'Contents/MacOS/Google Chrome --type=browser',
+                   chrome + 'Contents/Frameworks/Google Chrome Framework.framework/Versions/1/Helpers/'
+                            'Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer) --type=renderer',
+                   '/Applications/Claude.app/Contents/MacOS/Claude',
+                   '/Applications/Claude.app/Contents/Frameworks/Claude Helper (GPU).app/Contents/MacOS/Claude Helper (GPU)']
+        self.assertEqual(common.relevant_processes(idle), [])
+        self.assertEqual(common.relevant_processes(running), running)
+        self.assertEqual(len(common.relevant_processes(running, True)), 3)
+        self.assertEqual([platforms.MACOS.is_claude_process(p) for p in idle[-1:] + running[-2:]], [False, True, True])
+
     def test_failed_process_command_propagates(self):
         with patch.object(common, 'run', side_effect=subprocess.CalledProcessError(1, ['ps'])):
             with self.assertRaises(subprocess.CalledProcessError):

@@ -19,6 +19,10 @@ import sys
 
 CLI_PROCESS = re.compile(r'(?:^|/)claude(?:\s|$)', re.I)
 CLI_PACKAGE = '/@anthropic-ai/claude-code/'
+# Inside an app bundle these run on their own (widgets, share extensions,
+# on-demand XPC services) and can outlive the app; they do not mean the app
+# itself is running.
+BUNDLE_SIDECAR = re.compile(r'^Contents/(?:Extensions|PlugIns|XPCServices)/')
 VARIABLE = re.compile(r'^%([A-Z_]+)%(?:/(.*))?$')
 
 
@@ -131,7 +135,10 @@ class Platform:
         """The table name a process matches (safe to print), or None."""
         base = Path(proc).name
         for name in names:
-            if base == name or base.startswith(name + ' Helper') or f'/{name}.app/' in proc:
+            if base == name or base.startswith(name + ' Helper'):
+                return name
+            marker = f'/{name}.app/'
+            if marker in proc and not BUNDLE_SIDECAR.match(proc.split(marker, 1)[1]):
                 return name
         return None
 
@@ -159,8 +166,7 @@ class Platform:
         return []
 
     def is_claude_process(self, proc):
-        return ('/Claude.app/' in proc or Path(proc).name.startswith('Claude Helper')
-                or self.is_cli_process(proc))
+        return self.matched_name(proc, ('Claude',)) is not None or self.is_cli_process(proc)
 
 
 @dataclass(frozen=True)
