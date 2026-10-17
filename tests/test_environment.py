@@ -147,6 +147,35 @@ class EnvironmentTests(Fixture):
         self.assertTrue(any('自动记忆' in step for step in report['next_steps']))
         self.assertNotIn('private memory', json.dumps(report))
 
+    def test_keychain_presence_only_queries_attributes(self):
+        self.keychain.return_value = 0
+        report = self.collect()
+        args = self.keychain.call_args.args[0]
+        self.assertEqual(args, ['security', 'find-generic-password', '-s', 'Claude Code-credentials'])
+        self.assertNotIn('-w', args)
+        self.assertNotIn('-g', args)
+        self.assertTrue(report['credential_locations'][0]['present'])
+        self.keychain.return_value = 44
+        self.assertFalse(self.collect()['credential_locations'][0]['present'])
+
+    def test_keychain_query_failure_is_an_error(self):
+        self.keychain.return_value = 51
+        with self.assertRaisesRegex(RuntimeError, '钥匙串'):
+            self.collect()
+
+    def test_credentials_file_presence_without_reading(self):
+        self.file('.claude/.credentials.json', '{"token": "SECRET"}')
+        report = self.collect()
+        file_entry = report['credential_locations'][1]
+        self.assertTrue(file_entry['present'])
+        self.assertNotIn('SECRET', json.dumps(report))
+
+    def test_config_dir_override_requires_review_without_value(self):
+        with patch.dict(os.environ, {'CLAUDE_CONFIG_DIR': '/private/secret-location'}):
+            report = self.collect()
+        self.assertEqual(report['status'], 'needs_review')
+        self.assertNotIn('secret-location', json.dumps(report))
+
     def test_native_version_store_without_launcher_requires_review(self):
         self.file('.local/share/claude/versions/2.1.0', 'binary')
         report = self.collect()

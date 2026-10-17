@@ -33,6 +33,12 @@ def utf8_stdio():
             stream.reconfigure(encoding='utf-8')
 
 
+def run_status(args):
+    """Exit status only. Output is discarded: it may name accounts."""
+    return subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                          check=False, timeout=60).returncode
+
+
 def cli(main):
     utf8_stdio()
     try:

@@ -51,6 +51,8 @@ class Fixture(unittest.TestCase):
         self.stack = contextlib.ExitStack()
         self.stack.enter_context(patch.object(Path, 'home', return_value=self.home))
         self.stack.enter_context(patch.object(common, 'process_list', return_value=[]))
+        # Keychain query: "not found" unless a test says otherwise.
+        self.keychain = self.stack.enter_context(patch.object(common, 'run_status', return_value=44))
         self.stack.enter_context(patch.object(platforms, 'current', return_value=platforms.MACOS))
         self.stack.enter_context(patch.object(BS, 'browser_roots', return_value=[]))
         self.addCleanup(self.temp.cleanup)

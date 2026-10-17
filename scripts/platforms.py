@@ -33,6 +33,11 @@ class Platform:
     asset_names: tuple
     # Native installer version store; program files, not default backup data.
     cli_install_dirs: tuple
+    # Keychain service holding the Claude Code login (macOS only). The docs
+    # say "macOS Keychain"; the service name comes from community reports.
+    keychain_service: object
+    # Anthropic profile configuration directory (ant CLI / Console sign-in).
+    anthropic_profile_dir: str
     extra_config: tuple
     desktop_apps: tuple
     cli_candidates: tuple
@@ -234,6 +239,8 @@ MACOS = Platform(
     trace_names=TRACE_NAMES,
     asset_names=ASSET_NAMES,
     cli_install_dirs=('~/.local/share/claude',),
+    keychain_service='Claude Code-credentials',
+    anthropic_profile_dir='~/.config/anthropic',
     extra_config=('~/.config/claude', '~/.anthropic'),
     desktop_apps=('/Applications/Claude.app', '~/Applications/Claude.app'),
     cli_candidates=('~/.local/bin/claude', '/opt/homebrew/bin/claude', '/usr/local/bin/claude'),
@@ -295,6 +302,8 @@ WINDOWS = WindowsPlatform(
     trace_names=TRACE_NAMES,
     asset_names=ASSET_NAMES,
     cli_install_dirs=('~/.local/share/claude',),
+    keychain_service=None,
+    anthropic_profile_dir='%APPDATA%/Anthropic',
     extra_config=MACOS.extra_config,
     desktop_apps=('%LOCALAPPDATA%/AnthropicClaude', '%LOCALAPPDATA%/Packages/Claude_*'),
     cli_candidates=('~/.local/bin/claude.exe', '%APPDATA%/npm/claude.cmd',

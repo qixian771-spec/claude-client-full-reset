@@ -106,6 +106,11 @@ def main():
                 or any(item['usable_path'] for item in found['cli_candidates'])):
             raise RuntimeError('卸载验收前提不满足：仍有 Claude 安装')
     total = report(collect(deep=args.deep), args.quiet)
+    import check_environment
+    for item in check_environment.credential_locations(platform, Path.home()):
+        if item['present']:
+            # Informational: credentials are kept assets, not counted as hits.
+            print(f"[INFO] 凭证位置仍存在（工具不处理，未读取内容）：{item['location']}")
     print('PASS：所列范围未见命中（不等于全盘擦除）' if not total else 'REVIEW：仍有命中项，需逐项判断')
     return 1 if total else 0
 

@@ -58,6 +58,26 @@ def auto_memory_projects(projects):
     return sum(common.directory(child) and common.exists(child / 'memory') for child in projects.iterdir())
 
 
+KEYCHAIN_NOT_FOUND = 44  # security(1): item could not be found
+
+
+def credential_locations(platform, home):
+    """Whether credential stores exist. Values are never read or printed."""
+    found = []
+    if platform.keychain_service is not None:
+        # Without -w/-g only attributes are queried, so no secret is returned
+        # and no Keychain access prompt is shown.
+        code = common.run_status(['security', 'find-generic-password', '-s', platform.keychain_service])
+        if code not in (0, KEYCHAIN_NOT_FOUND):
+            raise RuntimeError(f'查询钥匙串失败（security 退出码 {code}），无法判断凭证位置')
+        found.append({'location': f'macOS 钥匙串项 {platform.keychain_service}（名称来自社区资料）',
+                      'present': code == 0})
+    for label, path in (('Claude Code 凭证文件', home / '.claude/.credentials.json'),
+                        ('Anthropic profile 目录', platform.resolve(platform.anthropic_profile_dir, home))):
+        found.append({'location': f'{label} {path}', 'present': common.exists(path)})
+    return found
+
+
 def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
     platform = platforms.current()
     home = Path.home() if home is None else Path(home)
@@ -111,6 +131,10 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
         # Names only; contents are never read.
         unclassified = sorted(child.name for child in claude_root.iterdir() if child.name not in known)
     memory_projects = auto_memory_projects(claude_root / 'projects')
+    credentials = credential_locations(platform, home)
+    if 'CLAUDE_CONFIG_DIR' in os.environ:
+        # Name only: the value is a user path and is not reported.
+        issues.append({'reason': '已设置 CLAUDE_CONFIG_DIR：配置、历史与凭证可能不在 ~/.claude，本工具的默认范围不完整'})
     processes = common.process_list()
     related = len(common.relevant_processes(processes))
     claude_running = sum(platform.is_claude_process(proc) for proc in processes)
@@ -155,6 +179,7 @@ def collect(home=None, search_path=None, app_paths=None, cli_paths=None):
         'schema_version': 1, 'platform': sys.platform, 'status': status, 'label': LABELS[status],
         'desktop_paths': desktop, 'cli_candidates': cli, 'cli_install_dirs': install_dirs,
         'local_paths': local, 'unclassified_items': unclassified, 'auto_memory_projects': memory_projects,
+        'credential_locations': credentials,
         'skill_present': skill_present, 'registered_apps': registered, 'related_process_count': related,
         'claude_process_count': claude_running, 'issues': issues,
         'python': {'version': '.'.join(map(str, sys.version_info[:3])), 'supported': python_ok},
@@ -190,6 +215,8 @@ def main():
             print('[未归类] .claude/' + name)
         for name in report['registered_apps']:
             print('[系统登记] ' + name)
+        for item in report['credential_locations']:
+            print(f"[凭证位置] {item['location']}：{'存在' if item['present'] else '不存在'}（未读取内容，工具不处理）")
         for name, paths in report['tools'].items():
             state = '发现可执行路径，版本未验证' if any(p['usable_path'] for p in paths) else '未找到可执行路径'
             print(f'[依赖] {name}: {state}')

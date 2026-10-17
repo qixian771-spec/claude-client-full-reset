@@ -577,6 +577,14 @@ class WindowsEnvironmentTests(WindowsFixture):
         self.file(self.roaming / 'Claude/config.json')
         self.assertEqual(self.collect()['status'], 'local_data_only')
 
+    def test_credentials_on_windows_are_files_not_keychain(self):
+        self.file(self.home / '.claude/.credentials.json')
+        self.file(self.roaming / 'Anthropic/configs/default.json')
+        locations = self.collect()['credential_locations']
+        self.assertEqual(len(locations), 2)
+        self.assertTrue(all(item['present'] for item in locations))
+        self.assertIn(str(self.roaming / 'Anthropic'), locations[1]['location'])
+
     def test_missing_powershell_is_a_base_tool_gap(self):
         (self.bin / 'powershell.exe').unlink()
         self.assertEqual(self.collect()['missing_base_tools'], ['powershell'])
