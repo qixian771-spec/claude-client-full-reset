@@ -74,13 +74,15 @@ def purge_db(path, apply_changes=False):
 
 
 def main():
-    platform = common.require_supported()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--backup', type=Path)
-    parser.add_argument('--browser', choices=platform.browser_names())
+    parser.add_argument('--browser', help='浏览器显示名称，例如 Chrome、Edge；按当前平台校验')
     parser.add_argument('--profile')
     args = parser.parse_args()
+    platform = common.require_supported()
+    if args.browser is not None and args.browser not in platform.browser_names():
+        parser.error(f'--browser 必须是以下之一: {", ".join(platform.browser_names())}')
     common.require_stopped()
     if args.apply and not args.backup:
         parser.error('--apply 需要 --backup')

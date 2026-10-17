@@ -27,6 +27,10 @@ jobs:
             python: '3.10'
             node: '18'
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # Git Bash on Windows, so "bash" is not the WSL launcher.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

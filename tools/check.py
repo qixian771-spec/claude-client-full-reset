@@ -4,6 +4,7 @@ import ast
 import json
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import yaml
 
@@ -60,6 +61,10 @@ def main():
     require(pkg["dependencies"] == lock["packages"][""]["dependencies"],
             "Dependency lock does not match package.json")
     require(pkg["private"] is True, "Package is intended for GitHub distribution")
+    # On Windows a bare "bash" can resolve to the WSL launcher in System32;
+    # use the first bash on PATH (Git Bash in CI) and fail if there is none.
+    bash = shutil.which("bash")
+    require(bash is not None, "bash is required for wrapper syntax checks")
     counts = {"python": 0, "bash": 0, "javascript": 0}
     for directory in ("scripts", "tools"):
         for path in sorted((ROOT / directory).glob("*")):
@@ -68,7 +73,7 @@ def main():
                 require_explicit_encoding(tree, path)
                 counts["python"] += 1
             elif path.suffix == ".sh":
-                subprocess.run(["bash", "-n", str(path)], check=True)
+                subprocess.run([bash, "-n", str(path)], check=True)
                 counts["bash"] += 1
             elif path.suffix == ".js":
                 subprocess.run(["node", "--check", str(path)], check=True)

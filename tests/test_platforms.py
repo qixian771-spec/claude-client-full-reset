@@ -6,7 +6,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from test_workflows import REAL_CURRENT, ROOT, common, platforms
+from test_workflows import REAL_CURRENT, ROOT, SQL, common, platforms
 
 # Literal copies of the macOS constants before the platform table existed
 # (commit dd4e985). The table must not change macOS behaviour.
@@ -78,6 +78,22 @@ class MacTableTests(unittest.TestCase):
         with patch.object(sys, 'platform', 'sunos5'):
             with self.assertRaisesRegex(RuntimeError, '不支持的平台'):
                 REAL_CURRENT()
+
+
+class ArgumentTests(unittest.TestCase):
+    def test_help_works_on_unsupported_platform(self):
+        with patch.object(sys, 'platform', 'linux'), patch.object(sys, 'argv', ['sql', '--help']), \
+                patch('sys.stdout', new_callable=io.StringIO):
+            with self.assertRaises(SystemExit) as caught:
+                SQL.main()
+        self.assertEqual(caught.exception.code, 0)
+
+    def test_unknown_browser_rejected_after_platform_check(self):
+        with patch.object(platforms, 'current', return_value=platforms.WINDOWS), \
+                patch.object(sys, 'argv', ['sql', '--browser', 'Arc']), patch('sys.stderr', new_callable=io.StringIO):
+            with self.assertRaises(SystemExit) as caught:
+                SQL.main()
+        self.assertEqual(caught.exception.code, 2)
 
 
 class EncodingTests(unittest.TestCase):

@@ -456,7 +456,8 @@ class InstallationTests(Fixture):
                 if '://' not in link and not link.startswith('#'):
                     self.assertTrue((doc.parent / link.split('#')[0]).is_file(), (doc, link))
         self.assertFalse((target / 'scripts/__pycache__').exists())
-        for name in ('backup.sh', 'scan_readonly.sh', 'trash_paths.sh'):
+        # The .sh wrappers are macOS entry points; Windows runs scripts\*.py directly.
+        for name in ('backup.sh', 'scan_readonly.sh', 'trash_paths.sh') if sys.platform != 'win32' else ():
             result = subprocess.run(['bash', str(target / 'scripts' / name), '--help'], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
         for name in ('browser_scan.py', 'chrome_purge.py', 'verify_reset.py', 'check_environment.py'):
