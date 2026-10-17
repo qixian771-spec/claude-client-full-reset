@@ -62,7 +62,8 @@ def launcher(platform, plan_path):
         return ('@echo off\r\nchcp 65001 >nul\r\n'
                 f'cd /d "{ROOT}"\r\n'
                 f'py -3 scripts\\handover_run.py --plan "{plan_path}"\r\n'
-                'echo.\r\npause\r\n')
+                # pause resets ERRORLEVEL; keep the run's exit code for the caller.
+                'set "code=%ERRORLEVEL%"\r\necho.\r\npause\r\nexit /b %code%\r\n')
     return ('#!/bin/bash\n'
             f'cd -- {shlex.quote(str(ROOT))} || exit 2\n'
             f'python3 scripts/handover_run.py --plan {shlex.quote(str(plan_path))}\n'

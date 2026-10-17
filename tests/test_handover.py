@@ -71,7 +71,7 @@ class GeneratorTests(Fixture):
         with patch.object(handover, 'ROOT', Path('C:/skills/claude-client-full-reset')):
             text = handover.launcher(platforms.WINDOWS, Path('C:/Users/u/Desktop/Claude清理交接.json'))
         self.assertTrue(text.startswith('@echo off\r\nchcp 65001'))
-        self.assertIn('pause', text)
+        self.assertTrue(text.endswith('pause\r\nexit /b %code%\r\n'))
 
 
 class FakeScripts:
@@ -202,6 +202,7 @@ class NativeWindowsHandoverTests(unittest.TestCase):
 
     def test_confirmed_hand_over_backs_up_and_recycles_only_the_target(self):
         code, log = self.run_launcher(self.generate(), '是')
+        self.assertEqual(code, 0, log)
         self.assertIn('[完成]', log, log)
         self.assertFalse(self.target.exists())
         self.assertTrue((self.home / '.claude/settings.json').exists())
@@ -209,6 +210,7 @@ class NativeWindowsHandoverTests(unittest.TestCase):
 
     def test_cancelled_hand_over_writes_nothing(self):
         code, log = self.run_launcher(self.generate(), 'no')
+        self.assertEqual(code, 3, log)
         self.assertIn('[已取消]', log, log)
         self.assertTrue(self.target.exists())
         self.assertEqual(list(self.home.glob('Claude-Reset-Backup-*')), [])
