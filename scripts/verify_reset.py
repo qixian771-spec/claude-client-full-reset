@@ -105,7 +105,7 @@ def main():
         found = check_environment.collect()
         if (found['desktop_paths'] or found['cli_install_dirs']
                 or any(item['usable_path'] for item in found['cli_candidates'])):
-            raise RuntimeError('卸载验收前提不满足：仍有 Claude 安装')
+            raise RuntimeError('卸载验收前提不满足：仍有 Claude 安装；先按官方说明卸载 Claude Desktop/Claude Code，或去掉 --uninstalled 只做常规验收')
     total = report(collect(deep=args.deep), args.quiet)
     import check_environment
     for item in check_environment.credential_locations(platform, Path.home()):

@@ -52,8 +52,18 @@ function python(args, run = execFileSync) {
   return run(command, [...prefix, ...args],
     { cwd: __dirname, encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] });
 }
+// Run through common.cli so failures print the sanitised [ERROR] and
+// [下一步] lines that formatError relays, never a traceback.
+const STOPPED_CHECK = [
+  'import sys, common',
+  'def check():',
+  '    common.require_supported()',
+  '    common.require_stopped()',
+  '    return 0',
+  'sys.exit(common.cli(check))',
+].join('\n');
 function requireStopped(run = execFileSync) {
-  python(['-c', 'import common; common.require_supported(); common.require_stopped()'], run);
+  python(['-c', STOPPED_CHECK], run);
 }
 function requireCovered(backupDir, dir) {
   python([path.join(__dirname, 'backup.py'), '--check-path', dir, '--backup', backupDir]);
@@ -145,7 +155,9 @@ async function main() {
   if (values.apply && !values.backup) throw new Error('--apply requires --backup');
   requireStopped();
   const roots = browserRoots();
-  if (values.browser && !roots.some(([name]) => name === values.browser)) throw new Error('Unknown browser');
+  if (values.browser && !roots.some(([name]) => name === values.browser)) {
+    throw new Error('Unknown browser; valid names: ' + roots.map(([name]) => name).join(', '));
+  }
   let profiles = 0;
   const plan = [];
   for (const [name, root] of roots) {
@@ -168,7 +180,10 @@ async function main() {
       }
     }
   }
-  if ((values.browser || values.profile) && !profiles) throw new Error('Selected browser/profile does not exist');
+  if ((values.browser || values.profile) && !profiles) {
+    throw new Error('Selected browser/profile does not exist; run python scripts/browser_scan.py to see the real ' +
+      'browser names and profile folder names (e.g. Default, Profile 1)');
+  }
   for (const item of plan) {
     if (values.apply) {
       requireStopped();
@@ -179,12 +194,23 @@ async function main() {
   }
   console.log(`matched_directories=${plan.length}; logical key deletion only, no forensic-erasure claim`);
 }
-// Do not print database keys, values or captured subprocess stdout/stderr:
-// first lines only. LevelDB causes carry a status and file path, which
-// explain why a database could not be opened.
+// Do not print database keys, values or arbitrary subprocess output: first
+// lines only. LevelDB causes carry a status and file path, which explain why
+// a database could not be opened. From our own Python entry points only the
+// already-sanitised [ERROR] / [下一步] lines are relayed.
+const RELAYED = /^\[(?:ERROR|下一步)\] /;
 function formatError(error) {
+  if (typeof error.stderr === 'string') {
+    const relayed = error.stderr.split(/\r?\n/).filter(text => RELAYED.test(text));
+    if (relayed.length) return relayed.join('\n');
+  }
   const line = item => (item.code ? item.code + ': ' : '') + String(item.message).split('\n')[0];
-  return '[ERROR] ' + line(error) + (error.cause instanceof Error ? ' (cause: ' + line(error.cause) + ')' : '');
+  let text = '[ERROR] ' + line(error) + (error.cause instanceof Error ? ' (cause: ' + line(error.cause) + ')' : '');
+  if (error.code === 'ENOENT' && String(error.syscall || '').startsWith('spawn')) {
+    text += '\n[下一步] 找不到 Python：安装 Python 3.10+（Windows 需带 py 启动器），' +
+      '或把环境变量 CLAUDE_RESET_PYTHON 设为 python 可执行文件的完整路径后重试';
+  }
+  return text;
 }
 module.exports = { purgeDir, operate, inventory, iterProfiles, requireStopped, browserRoots, pythonCommand, formatError, levelState, main };
 if (require.main === module) {

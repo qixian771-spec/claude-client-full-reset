@@ -145,3 +145,16 @@ test('directory without CURRENT is empty only when it has no record files', asyn
   fs.rmSync(path.join(dir, 'CURRENT'));
   assert.throws(() => levelState(dir), /possibly damaged/);
 });
+test('Python child errors are relayed only through sanitised prefixed lines', () => {
+  const error = Object.assign(new Error('Command failed: python3 -c import common'), {
+    status: 2, stderr: 'Traceback (most recent call last):\nsecret=abc\n[ERROR] RuntimeError: 相关应用仍在运行（1 个进程：Safari×1）\n[下一步] 在应用菜单选“退出”\n',
+  });
+  assert.equal(formatError(error), '[ERROR] RuntimeError: 相关应用仍在运行（1 个进程：Safari×1）\n[下一步] 在应用菜单选“退出”');
+  const noisy = Object.assign(new Error('Command failed'), { stderr: 'only noise secret=abc' });
+  assert.doesNotMatch(formatError(noisy), /secret/);
+});
+test('missing Python launcher explains how to fix it', () => {
+  const error = Object.assign(new Error('spawnSync py ENOENT'), { code: 'ENOENT', syscall: 'spawnSync py' });
+  assert.match(formatError(error), /\[下一步\] 找不到 Python.*CLAUDE_RESET_PYTHON/);
+  assert.doesNotMatch(formatError(Object.assign(new Error('x'), { code: 'ENOENT', syscall: 'open' })), /下一步/);
+});

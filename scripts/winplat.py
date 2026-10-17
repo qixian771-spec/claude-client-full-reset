@@ -75,7 +75,7 @@ PROCESS_QUERY = ("$ErrorActionPreference = 'Stop'; "
 
 def powershell():
     if 'SystemRoot' not in os.environ:
-        raise RuntimeError('环境变量 SystemRoot 未设置，无法定位 Windows PowerShell')
+        raise RuntimeError('环境变量 SystemRoot 未设置，无法定位 Windows PowerShell；请在正常登录的用户会话里，用系统终端（macOS“终端”或 Windows Terminal/PowerShell）运行，不要手动伪造该变量')
     return str(Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe')
 
 
@@ -166,13 +166,13 @@ def recycle(path, shell=None):
     path = Path(path)
     root = path.anchor
     if shell.drive_type(root) != DRIVE_FIXED:
-        raise RuntimeError(f'只支持本地固定磁盘上的回收站（可移动盘或网络盘会永久删除）: {path}')
+        raise RuntimeError(f'只支持本地固定磁盘上的回收站（可移动盘或网络盘会永久删除）: {path}；请把数据放在本地固定磁盘后再处理，或由你人工处理该位置')
     if shell.nuke_on_delete(root):
-        raise RuntimeError(f'该磁盘的回收站设置为“直接删除”，拒绝操作: {root}')
+        raise RuntimeError(f'该磁盘的回收站设置为“直接删除”，拒绝操作: {root}；在桌面右键“回收站 → 属性”，为该磁盘选“自定义大小”而不是“不将文件移到回收站”，然后重试')
     code, aborted = shell.delete_to_recycle_bin(path)
     if code != 0:
         raise RuntimeError(f'移入回收站失败（SHFileOperation 代码 {code:#x}）: {path}')
     if aborted:
-        raise RuntimeError(f'移入回收站被取消，目标未处理: {path}')
+        raise RuntimeError(f'移入回收站被取消，目标未处理: {path}；如果你在确认框里选了“否”，这是预期结果，目标保持原样')
     if common.exists(path):
         raise RuntimeError(f'回收站操作返回后目标仍存在: {path}')

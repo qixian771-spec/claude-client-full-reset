@@ -14,25 +14,25 @@ def validate_path(raw, must_exist=True):
     path = backup.absolute_path(raw)
     backup.no_symlink_parents(path)
     if common.exists(path) and common.is_link(path):
-        raise ValueError('不支持移动符号链接、junction 或其他重解析点（包括断链）；请单独检查')
+        raise ValueError('不支持移动符号链接、junction 或其他重解析点（包括断链）；它可能是快捷链接或 OneDrive 等同步占位，工具不跟随。请找到它指向的真实位置，或由你人工处理')
     platform = platforms.current()
     home = Path.home().resolve()
     protected = {home, *home.parents}
     protected.update(platform.resolve_all(platform.protected, home))
     if path in protected or any(p in path.parents for p in platform.resolve_all(platform.protected_trees, home)):
-        raise ValueError(f'拒绝危险路径: {path}')
+        raise ValueError(f'拒绝危险路径: {path}；这是系统或个人重要目录本身，不能整体移走，请改用扫描结果里列出的具体子路径')
     for container, entries in platform.confined:
         if platform.resolve(container, home) in path.parents:
             permitted = platform.expand_all(entries, home)
             if not any(path == item or item in path.parents for item in permitted):
-                raise ValueError(f'此容器内只允许处理 Claude 数据目录: {path}')
+                raise ValueError(f'此容器内只允许处理 Claude 数据目录: {path}；MSIX 包里只能处理 LocalCache\\Roaming\\Claude（或 Claude-3p），卸载应用请用系统“设置 → 应用”')
     allowed = home in path.parents or path in platform.resolve_all(platform.trash_allowed, home)
     if platform.trash_diagnostic_dir is not None:
         diagnostic = platform.resolve(platform.trash_diagnostic_dir, home)
         if path.parent == diagnostic and path.name.lower().startswith(('claude', 'anthropic')):
             allowed = True
     if not allowed:
-        raise ValueError(f'目标不在支持的清理范围: {path}')
+        raise ValueError(f'目标不在支持的清理范围: {path}；工具只处理你用户目录里的具体路径（macOS 另含 /Applications/Claude.app），请使用扫描结果里列出的路径')
     if must_exist and not common.exists(path):
         raise ValueError(f'目标不存在: {path}')
     return path
@@ -80,7 +80,7 @@ def execute(paths, apply=False, backup_dir=None):
             raise ValueError('清单包含重复或父子重叠路径')
     if apply:
         if backup_dir is None:
-            raise ValueError('实际移动需要 --backup 已验证的备份目录')
+            raise ValueError('实际移动需要 --backup 已验证的备份目录；先运行 backup.py 创建备份，再把它打印的备份目录传给 --backup')
         common.require_stopped()
         for path in approved:
             backup.require_covered(backup_dir, path)

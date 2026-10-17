@@ -97,7 +97,7 @@ def main():
             profiles += 1
             files.extend(sqlite_files(folder))
     if (args.profile or args.browser) and not profiles:
-        raise ValueError('指定浏览器/profile 不存在；未执行操作')
+        raise ValueError('指定浏览器/profile 不存在；未执行操作。先运行 browser_scan.py 查看实际的浏览器名称和 profile 目录名（例如 Default、Profile 1）')
     # Validate every DB and backup before touching any database.
     plans = []
     for path in files:

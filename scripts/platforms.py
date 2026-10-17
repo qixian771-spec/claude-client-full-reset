@@ -82,7 +82,7 @@ class Platform:
 
     def variable_dir(self, name):
         if name not in os.environ:
-            raise RuntimeError(f'环境变量 {name} 未设置，无法确定位置；未执行任何操作')
+            raise RuntimeError(f'环境变量 {name} 未设置，无法确定位置；未执行任何操作；请在正常登录的用户会话里，用系统终端（macOS“终端”或 Windows Terminal/PowerShell）运行，不要手动伪造该变量')
         return Path(os.environ[name])
 
     def resolve_all(self, entries, home=None):
@@ -186,7 +186,7 @@ class WindowsPlatform(Platform):
 
     def pathext(self):
         if 'PATHEXT' not in os.environ:
-            raise RuntimeError('环境变量 PATHEXT 未设置，无法判断可执行文件')
+            raise RuntimeError('环境变量 PATHEXT 未设置，无法判断可执行文件；请在正常登录的用户会话里，用系统终端（macOS“终端”或 Windows Terminal/PowerShell）运行，不要手动伪造该变量')
         return [ext.lower() for ext in os.environ['PATHEXT'].split(';') if ext]
 
     def executable_names(self, name):
@@ -203,7 +203,7 @@ class WindowsPlatform(Platform):
     def check_path_form(self, path):
         # Only local drive-letter paths: no UNC shares, no \\?\ device paths.
         if not re.fullmatch(r'[A-Za-z]:', path.drive):
-            raise ValueError(f'只支持本地盘符绝对路径（不支持 UNC、\\\\?\\ 或网络路径）: {path}')
+            raise ValueError(f'只支持本地盘符绝对路径（不支持 UNC、\\\\?\\ 或网络路径）: {path}；请改用本地磁盘上 C:\\... 形式的路径')
 
     def matched_name(self, proc, names):
         return next((name for name in names if proc[0].lower() == name.lower()), None)

@@ -46,6 +46,10 @@ def cli(main):
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError, sqlite3.Error) as exc:
         # Never print captured process output: it may contain credentials.
         print(f'[ERROR] {type(exc).__name__}: {exc}', file=sys.stderr)
+        import hints  # deferred: only needed on failure
+        step = hints.next_step(exc, sys.platform)
+        if step:
+            print('[下一步] ' + step, file=sys.stderr)
         return 2
 
 
@@ -122,7 +126,8 @@ def relevant_processes(processes, browsers_only=False):
 def require_stopped(browsers_only=False):
     alive = relevant_processes(process_list(), browsers_only)
     if alive:
-        raise RuntimeError(f'相关应用仍在运行（{len(alive)} 个进程）；请退出后重试')
+        import hints  # deferred: only needed when something is still running
+        raise RuntimeError(hints.running_apps_message(platforms.current(), alive))
 
 
 def quote_identifier(name):

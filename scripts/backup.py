@@ -120,7 +120,7 @@ def create_backup(dest, extra=()):
     home = Path.home().resolve()
     dest = Path(dest).resolve(strict=True)
     if not dest.is_dir():
-        raise ValueError('备份父目录必须已存在')
+        raise ValueError('备份父目录必须已存在；请先创建该目录，或不加 --dest 使用默认的用户目录')
     sources = [(src, name) for src, name in platform.core(home) if common.exists(src)]
     for index, item in enumerate(extra):
         src = absolute_path(item)
@@ -170,7 +170,7 @@ def verify_backup(folder):
         raise ValueError('备份清单缺失或版本无效')
     # Manifests written before the platform field existed came from macOS only.
     if data.get('platform', 'darwin') != platforms.current().key:
-        raise ValueError('备份来自其他平台，拒绝作为本次校验或修改依据')
+        raise ValueError('备份来自其他平台，拒绝作为本次校验或修改依据；请在创建该备份的同一平台上使用它')
     if data['home'] != str(Path.home().resolve()):
         raise ValueError('备份属于其他家目录，拒绝作为本次修改授权')
     payload = folder / 'payload'
@@ -207,7 +207,7 @@ def require_covered(folder, target):
             if subset and inventory(target) == subset:
                 return
             raise ValueError(f'目标自备份后已变化，请重新备份: {target}')
-    raise ValueError(f'备份未覆盖目标: {target}')
+    raise ValueError(f'备份未覆盖目标: {target}；重新创建备份，并用 --include 加入这个路径或它的上级目录')
 
 
 def restore_plan(folder, data, paths=None):
