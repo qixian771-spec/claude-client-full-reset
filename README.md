@@ -1,5 +1,7 @@
 # Claude Client Full Reset
 
+> **总入口在 [claude-setup-kit](https://github.com/qixian771-spec/claude-setup-kit)**：只把那个链接发给 AI，它会按需要调用本仓库（清理重置、标识验证、遥测与分流补齐）、建节点仓库和 Mac 环境镜像。单独用本仓库时从下面开始。
+
 macOS 与 Windows 上 Claude Code / Claude Desktop 环境检测、本地数据检查、备份与清理的 Agent Skill。MIT 开源。
 
 支持本地文件检查、SHA-256 备份校验、移入废纸篓（macOS Finder）或回收站（Windows，仅本地固定磁盘）、SQLite 域名记录和 LevelDB key 清理；Firefox 只读扫描；凭证位置只报告存在与否。**清理默认预览，实际清理必须有校验通过的备份；恢复拒绝覆盖。** 不处理服务端数据，不承诺解除账号限制或物理擦除磁盘。
