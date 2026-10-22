@@ -138,3 +138,8 @@
 - `4a1923e`（功能 + 缩进修复）：[run 39868961948](https://github.com/qixian771-spec/claude-client-full-reset/actions/runs/39868961948) macOS 14 ×2、Ubuntu 24.04 通过；Windows 2022 ×2 失败——测试夹具用 `write_text` 未指定 UTF-8，cp1252 无法编码 emoji 策略组名。
 - `a9b2c2a`（测试夹具与 `--help` 子进程显式 UTF-8）：[run 39869341217](https://github.com/qixian771-spec/claude-client-full-reset/actions/runs/39869341217) 五个 job 全部通过：结构检查、216 项 Python 测试（8 项按平台跳过）、18 项 JavaScript 测试。
 - 本机：64 条缺失规则插入运行配置副本并经用户脚本模拟生成后 `verge-mihomo -t` 通过；正在使用的 Clash 配置未改动。
+
+## 0.5.1 GitHub 验证（R1 标识清单 + R0b auto-patch 目标）
+
+- `209babc`：[run 39870010021](https://github.com/qixian771-spec/claude-client-full-reset/actions/runs/39870010021) 五个 job 全部通过：结构检查（19 个 Python 脚本）、233 项 Python 测试（8 项按平台跳过）、18 项 JavaScript 测试。
+- 本机：`identifiers.py` 实机快照 22 项，仅指纹；`find_default_merge_target` 只读解析出当前生效 profile，未写入。
