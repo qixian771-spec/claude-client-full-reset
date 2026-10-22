@@ -14,7 +14,10 @@ import sys
 
 import platforms
 
-DOMAIN = re.compile(r'(?:^|[^a-z0-9.-])\.?(?:[a-z0-9-]+\.)*(?:claude\.ai|anthropic\.com)(?=[:/?#\x00]|$)', re.I)
+DOMAIN = re.compile(
+    r'(?:^|[^a-z0-9.-])\.?(?:[a-z0-9-]+\.)*(?:claude\.ai|claude\.com|clau\.de|anthropic\.com|claudeusercontent\.com|claudemcpclient\.com|claudemcpcontent\.com)(?=[:/?#\x00]|$)',
+    re.I,
+)
 
 
 def require_supported():

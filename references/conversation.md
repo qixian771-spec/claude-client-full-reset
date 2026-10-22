@@ -89,6 +89,14 @@
 - **AI 动作 2**：交接给独立终端执行 `--restore … --path … --dry-run`，确认后去掉 `--dry-run`（执行手册路线 D）。
 - **对用户说（完成）**：“已恢复 {路径}，内容和备份一致。恢复后再扫描会重新看到这些记录，这是正常的。”
 
+## 5B. 监测与上报（遥测）、域名/CDN、分流规则、第三方与 `claude.ai` 进程兜底（傻瓜式一键补齐）
+
+- **进入条件**：用户要求检查或一键补齐遥测关闭、域名/CDN 分流规则、第三方上报阻断或 `claude.ai` 进程兜底。
+- **AI 动作 1**：`python3 scripts/telemetry_routing.py`（只读体检，无需退出应用）。
+- **对用户说（发现缺口）**：“我检查了你的遥测配置和代理分流规则：你已经有的设置（比如网关或已设好的规则）我完全不会动；目前还缺 {缺失的遥测项数} 项遥测关闭配置和 {缺失的分流规则数} 条分流/进程兜底规则。需要我直接帮你一键补齐缺失的部分，还是在桌面生成一个双击运行文件给你确认后补齐？”
+- **AI 动作 2**：用户要直接一键补齐时运行 `python3 scripts/telemetry_routing.py --apply`（或生成双击文件 `python3 scripts/telemetry_routing.py --launcher`）。
+- **对用户说（完成）**：“已经把缺失的遥测关闭项补进 `.claude/settings.json`（原文件已备份在同目录，你原有的设置和网关都没有覆盖），并在 `.claude/routing-rules/` 生成了增量补充规则 `claude-routing-supplement.yaml` 和完整规则模板 `claude-routing-full.yaml`。”
+
 ## 6. 常见卡点的话术
 
 | 输出 | 对用户说 |

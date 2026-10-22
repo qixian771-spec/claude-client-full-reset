@@ -124,7 +124,10 @@ def scan_safari():
 
 
 FIREFOX_FILES = ('places.sqlite', 'cookies.sqlite', 'webappsstore.sqlite', 'formhistory.sqlite')
-FIREFOX_HOSTS = ('claude.ai', 'anthropic.com')
+FIREFOX_HOSTS = (
+    'claude.ai', 'claude.com', 'clau.de', 'anthropic.com',
+    'claudeusercontent.com', 'claudemcpclient.com', 'claudemcpcontent.com',
+)
 
 
 def firefox_origin_matches(name):

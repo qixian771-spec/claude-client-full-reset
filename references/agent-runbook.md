@@ -209,12 +209,37 @@ SQL/LevelDB 预览退出 0 只表示预览成功，是否有匹配需读输出�
 
 **恢复的验收标准是与选定备份一致，不是清理扫描为零。** 恢复后原来的 Claude 记录重新出现是预期现象，不能再次删除来取得清理 PASS。
 
+## E. 监测与上报（遥测）、域名/CDN、分流规则、第三方与 `claude.ai` 进程兜底路线
+
+**进入条件**：用户要求检查或一键补齐遥测/上报屏蔽、域名与 CDN 分流、第三方监测拦截或 `claude.ai` 进程兜底规则。先读 [监测与分流说明](telemetry-and-routing.md)。遵循**“如果有的话就不用覆盖，补充缺点”**。
+
+1. 先运行只读体检（无需退出正在使用的 Claude 或浏览器）：
+
+   ```bash
+   python3 scripts/telemetry_routing.py
+   ```
+
+2. 用户要求傻瓜式一键补齐时，直接运行：
+
+   ```bash
+   python3 scripts/telemetry_routing.py --apply
+   ```
+
+   或生成桌面双击一键运行文件（交互式预览后输入“是”确认）：
+
+   ```bash
+   python3 scripts/telemetry_routing.py --launcher
+   ```
+
+3. 修改 `~/.claude/settings.json` 前会自动生成带 SHA-256 校验的同目录备份，且**只补充缺失的遥测键，绝不覆盖用户已有的设置、第三方网关（如 `ANTHROPIC_BASE_URL`）或权限**；同时在 `~/.claude/routing-rules/` 生成仅含缺失项的 `claude-routing-supplement.yaml` 与完整版 `claude-routing-full.yaml`（指定 `--proxy-config` 时备份后增量补齐缺失规则）。
+
 ## 3. 各命令退出码：必须按入口解读
 
 | 入口 | 0 | 1 | 2/其他异常 |
 | --- | --- | --- | --- |
 | `check_environment.py` | 检测完成且无基础准备问题；可仍有安装/数据 | 异常或基础依赖待处理 | 检测失败，不能得出未安装结论 |
 | `preflight.py` | 全部前提已满足，可以开始写入 | 有未满足项，按“下一步”处理后重跑 | 某项检查本身失败（已列出），停止 |
+| `telemetry_routing.py` | 遥测与分流规则全部齐备，或 `--apply`/`--launcher` 成功 | 只读体检发现缺失项待补齐 | 格式/链接/备份校验错误停止（交互取消退出 3） |
 | `handover.py` | 已生成交接文件 | —（不使用） | 目标/路径无效或文件已存在，未生成 |
 | `handover_run.py`（交接文件） | 已按确认清单完成，验收结果见日志 | —（3 = 用户未确认，未移动任何文件） | 某步失败已停止，见日志 |
 | `scan_readonly.sh` / `scan_readonly.py` | 所查范围无命中且无相关进程 | 命中/相关进程需审阅 | 检查失败 |

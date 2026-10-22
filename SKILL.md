@@ -1,6 +1,6 @@
 ---
 name: claude-client-full-reset
-description: 检测 macOS 与 Windows 上 Claude 安装与依赖并准备配置清单，检查、备份和清理 Claude Code 与 Claude Desktop 的本地数据。适用于首次环境准备、检查残留或重置客户端；先报告范围、校验备份，再按确认清单处理。保留用户技能、设置、凭证和自动记忆的决定权，不承诺消除服务端记录、解除账号限制或物理擦除磁盘。
+description: 检测 macOS 与 Windows 上 Claude 安装与依赖并准备配置清单，检查、备份和清理 Claude Code 与 Claude Desktop 的本地数据；支持傻瓜式一键体检与补齐监测和上报（遥测）、域名、CDN、第三方、分流规则与 claude.ai 进程兜底（已有配置与规则不覆盖，先备份后只补缺失项）。适用于首次环境准备、分流与遥测补齐、检查残留或重置客户端；保留用户技能、设置、凭证和自动记忆的决定权，不承诺消除服务端记录、解除账号限制或物理擦除磁盘。
 license: MIT
 ---
 
@@ -35,6 +35,7 @@ license: MIT
 | 已授权的具体文件/目录清理 | C：生成交接文件 `scripts/handover.py`，用户双击运行（前提自检 → 预览 → 确认 → 备份校验 → 执行 → 验收） | [执行手册 C1](references/agent-runbook.md#c1-交接独立终端)、[恢复说明](references/restore-and-rebuild.md) |
 | SQLite/LevelDB 记录精删 | C4，明确浏览器与 profile 选择器 | [浏览器规则](references/browser-layer.md) |
 | 恢复文件/目录 | D，优先选择明确 `--path`，先 `--dry-run` | [恢复说明](references/restore-and-rebuild.md) |
+| 监测与上报（遥测）、域名/CDN、分流规则、第三方与 `claude.ai` 进程兜底（给 AI 的傻瓜式一键补齐，已有项不覆盖） | E：`python3 scripts/telemetry_routing.py --apply --auto-patch-proxy --json`（一键备份并补齐缺口） / `python3 scripts/telemetry_routing.py --json`（只读体检） | [监测与分流说明](references/telemetry-and-routing.md) |
 | 错误、权限或部分完成 | 停止写入并保留证据 | [常见故障](references/pitfalls.md) |
 | 带不懂技术的用户走完全程 | 按对话模板说话与停顿 | [对话模板](references/conversation.md) |
 | 交付结果 | 按本次路线填写证据 | [证据报告](references/evidence-log.md) |

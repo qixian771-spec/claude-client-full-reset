@@ -11,9 +11,10 @@
 | CLI 痕迹 | `.claude` 中 projects、history.jsonl、sessions、tasks、teams、shell-snapshots、session-env、file-history、paste-cache、.cc-writes、plans、debug、backups、cache、image-cache、uploads、dev-mods、usage-data、feedback、feedback-bundles、stats-cache.json、remote-settings.json、policy-limits.json(.stamp.json)、旧版 todos/statsig/logs | 同上；`projects/<项目>/memory/` 是自动记忆，处理 projects 会一并移走，预览会提示 |
 | 自有资产 | `.claude` 中 skills、agents、hooks、plugins、settings*.json、.credentials.json、CLAUDE.md、keybindings.json、themes、rules、commands、output-styles、workflows、agent-memory、jobs、daemon | 默认保留；整个 `.claude` 需明确授权 |
 | 未归类 | `.claude` 中不属于上两类的顶层名称（例如第三方工具文件），只列名称不读内容 | 不自动处理；检测报告 `unclassified_items` 列出供人工确认 |
-| Chromium | 支持的全部浏览器根下 Default、Profile 开头或具有 Preferences/Cookies/History/Network 标记的目录，递归全部普通文件；根下 Local State | SQLite 文本中的服务域名；Local Storage LevelDB key 中的服务域名 |
+| Chromium | 支持的全部浏览器根下 Default、Profile 开头或具有 Preferences/Cookies/History/Network 标记的目录，递归全部普通文件；根下 Local State | SQLite 文本中的服务域名（`claude.ai`、`claude.com`、`anthropic.com`、`claudeusercontent.com`、`claudemcpcontent.com` 及子域）；Local Storage LevelDB key 中的服务域名 |
 | Safari | History.db、RecentlyClosedTabs.plist、Downloads.plist | 无自动精删；已确认文件可备份后移入废纸篓 |
-| Firefox | Profiles 下各 profile 的 places/cookies/webappsstore/formhistory.sqlite（快照查询）及 storage/default 中 claude.ai、anthropic.com 站点目录名 | 只读扫描，无自动精删；具体文件需单独评估并备份 |
+| Firefox | Profiles 下各 profile 的 places/cookies/webappsstore/formhistory.sqlite（快照查询）及 storage/default 中 `claude.ai`、`claude.com`、`anthropic.com`、`claudeusercontent.com`、`claudemcpcontent.com` 站点目录名 | 只读扫描，无自动精删；具体文件需单独评估并备份 |
+| 监测与分流 | `telemetry_routing.py` 检查 `.claude/settings.json` 遥测/上报开关、第三方网关键名，以及本地 Clash/Mihomo 配置中的域名、CDN、遥测/第三方 `REJECT` 与 `claude.ai` 进程兜底（`PROCESS-NAME`） | `--apply` 备份后仅补充缺失项（已有项不覆盖），并输出增量/完整 Clash 规则文件；详见 [监测与分流说明](telemetry-and-routing.md) |
 | HTTP 缓存 | `--deep` 加 Chrome HTTP 缓存，不宣称其他浏览器缓存已检查 | 具体批准路径 |
 | 编辑器 | VS Code/Cursor/Windsurf 扩展名称；对应 settings.json、globalStorage/state.vscdb 内容关键词 | 不自动编辑配置或扩展注册表 |
 | 系统指定目录 | 用户与系统 DiagnosticReports；家目录 Applications、.Trash；用户 Containers、Group Containers、Application Scripts 的名称 | 家目录下明确目标；系统只允许 `/Applications/Claude.app` 及指定名称的系统诊断文件 |

@@ -12,7 +12,7 @@ function loadDatabase() {
   catch (error) { throw new Error('无法加载 classic-level (' + error.code + ')；请在 skill 目录执行 npm ci'); }
 }
 
-const DOMAIN = /(?:^|[^a-z0-9.-])\.?(?:[a-z0-9-]+\.)*(?:claude\.ai|anthropic\.com)(?=[:/?#\x00]|$)/i;
+const DOMAIN = /(?:^|[^a-z0-9.-])\.?(?:[a-z0-9-]+\.)*(?:claude\.ai|claude\.com|clau\.de|anthropic\.com|claudeusercontent\.com|claudemcpclient\.com|claudemcpcontent\.com)(?=[:/?#\x00]|$)/i;
 
 function exists(file) {
   try { fs.lstatSync(file); return true; }

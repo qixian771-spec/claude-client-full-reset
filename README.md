@@ -12,6 +12,7 @@ macOS 与 Windows 上 Claude Code / Claude Desktop 环境检测、本地数据�
 | --- | --- |
 | `scripts/preflight.py` | 一条命令列出写入前所有未满足的条件（要退出的应用、权限、备份空间等），全部满足才显示“可以开始” |
 | `scripts/handover.py` | AI 按确认的清单生成双击运行的交接文件（macOS `.command`，Windows `.cmd`）：前提自检 → 预览 → 输入“是” → 备份 → 校验 → 移入废纸篓/回收站 → 验收；不确认就什么都不写，失败即停，结果写入日志供 AI 读取 |
+| `scripts/telemetry_routing.py` | **给 AI 直接调用的傻瓜式一键补齐工具**：自动检测并补齐 **监测与上报（遥测）、域名、CDN、分流规则（含 IP/ASN/NTP）、第三方、claude.ai 进程兜底**（已有设置与规则不覆盖，自动备份后只补缺失项；支持 `--apply --auto-patch-proxy` 一键注入本机代理配置并导出 Clash/Surge/sing-box 四种格式），详见 [监测与分流说明](references/telemetry-and-routing.md) |
 | 报错里的 `[下一步]` | 常见失败（应用在运行、macOS 隐私权限、回收站拒绝等）同时给出原因和具体下一步 |
 
 ## 交给其他 AI 执行
