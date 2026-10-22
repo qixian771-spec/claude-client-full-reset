@@ -179,6 +179,33 @@ class TelemetryRoutingTests(Fixture):
         self.assertIn('DOMAIN-SUFFIX,claude.com,P', data['prepend-rules'])
         self.assertEqual(data['append-rules'], [])
 
+    def test_auto_patch_targets_the_active_clash_verge_profile(self):
+        base = 'Library/Application Support/io.github.clash-verge-rev.clash-verge-rev'
+        self.file(f'{base}/profiles.yaml',
+                  'current: abc123\nitems:\n- uid: Merge\n  type: merge\n  file: Merge.yaml\n'
+                  '- uid: abc123\n  type: local\n  name: mine\n  file: abc123.yaml\n  option:\n    script: s1\n')
+        merge = self.file(f'{base}/profiles/Merge.yaml', 'prepend-rules:\n  - DOMAIN-SUFFIX,claude.ai,OLD\n')
+        profile = self.file(f'{base}/profiles/abc123.yaml', 'rules:\n- DOMAIN-SUFFIX,claude.ai,出口选择\n- MATCH,出口选择\n')
+        result = TR.apply_all(home=self.home, out_dir=self.root / 'routing-active', auto_patch_proxy=True)
+        self.assertEqual(Path(result['proxy_config_patch']['path']), profile)
+        self.assertEqual(merge.read_text(encoding='utf-8'), 'prepend-rules:\n  - DOMAIN-SUFFIX,claude.ai,OLD\n')
+        data = yaml.safe_load(profile.read_text(encoding='utf-8'))
+        self.assertIn('DOMAIN-SUFFIX,claude.com,出口选择', data['rules'])
+        self.assertNotIn('DOMAIN-SUFFIX,claude.com,OLD', data['rules'])
+        self.assertEqual(data['rules'][-1], 'MATCH,出口选择')
+
+    def test_auto_patch_falls_back_to_merge_without_profiles_index(self):
+        base = 'Library/Application Support/io.github.clash-verge-rev.clash-verge-rev'
+        merge = self.file(f'{base}/profiles/Merge.yaml', 'prepend-rules:\n  - DOMAIN-SUFFIX,claude.ai,P\n')
+        result = TR.apply_all(home=self.home, out_dir=self.root / 'routing-fb', auto_patch_proxy=True)
+        self.assertEqual(Path(result['proxy_config_patch']['path']), merge)
+
+    def test_active_profile_with_unsafe_file_name_is_ignored(self):
+        base = 'Library/Application Support/io.github.clash-verge-rev.clash-verge-rev'
+        self.file(f'{base}/profiles.yaml', 'current: x\nitems:\n- uid: x\n  file: ../../etc/evil.yaml\n')
+        folder = self.home / base
+        self.assertIsNone(TR.active_profile_file(folder))
+
 
 if __name__ == '__main__':
     unittest.main()

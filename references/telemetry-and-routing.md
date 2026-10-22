@@ -114,5 +114,6 @@
 ## 4. 已知限制（AI 必须如实报告）
 
 - “规则是否已存在”是把默认目录下**所有** Clash/Mihomo YAML（含未激活的 profile 与 Merge/Script 覆写）合并后判断的。某条规则只写在未激活配置里也会被算作“已有”；要精确到当前生效配置，用 `--proxy-config` 指定那一个文件。
+- `--auto-patch-proxy` 的目标：先读 Clash Verge 的 `profiles.yaml`，`current` 指向哪个 profile 就写它的文件（这是唯一保证进生成配置的地方；profile 绑定的脚本可能会删掉 `prepend-rules`，所以不写全局 Merge.yaml）；没有 `profiles.yaml` 才退回 `profiles/Merge.yaml` / `Merge.yaml` / `config.yaml`。报告里 `proxy_config_patch.path` 写明实际改了哪个文件。
 - `--auto-patch-proxy` / `--proxy-config` 插入规则时沿用目标文件里该列表已有的缩进（Clash Verge 生成的 `rules:` 为 0 缩进，Merge.yaml 模板为 2 缩进）；列表为空时用键缩进 + 2。插入后请用 `verge-mihomo -t -f <文件>`（或重新激活配置）验证能加载。
 - 本工具不改代理分组、不切节点、不重启核心；补齐后由 Clash Verge 重新激活配置才生效。

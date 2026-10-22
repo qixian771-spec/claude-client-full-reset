@@ -637,8 +637,42 @@ def write_routing_files(routing_report, out_dir):
     }
 
 
+def active_profile_file(folder):
+    """Clash Verge: profiles.yaml names the active profile ("current"); its file holds the live rules.
+
+    The global Merge.yaml may not apply at all (a profile-bound script can delete
+    prepend-rules), so the active profile file is the only target that is guaranteed
+    to be in the generated config. Returns None when profiles.yaml is absent/unparseable.
+    """
+    index = folder / 'profiles.yaml'
+    if not common.exists(index) or common.is_link(index) or not index.is_file():
+        return None
+    lines = index.read_text(encoding='utf-8').splitlines()
+    current = next((l.split(':', 1)[1].strip().strip('\'"') for l in lines if re.match(r'^current:\s*\S', l)), None)
+    if not current:
+        return None
+    file_name, in_item = None, False
+    for line in lines:
+        m = re.match(r'^-\s*uid:\s*(\S+)', line)
+        if m:
+            in_item = m.group(1).strip('\'"') == current
+            continue
+        if in_item and re.match(r'^-\s', line):
+            break
+        m = re.match(r'^\s+file:\s*(\S+)', line) if in_item else None
+        if m:
+            file_name = m.group(1).strip('\'"')
+            break
+    if not file_name or '/' in file_name or '\\' in file_name or file_name.startswith('.'):
+        return None
+    candidate = folder / 'profiles' / file_name
+    if common.exists(candidate) and not common.is_link(candidate) and candidate.is_file():
+        return candidate
+    return None
+
+
 def find_default_merge_target(platform, home):
-    """Locate a user Merge.yaml or config.yaml in Clash Verge / Mihomo if present."""
+    """Active Clash Verge profile first; otherwise a user Merge.yaml or config.yaml if present."""
     entries = PROXY_DIRS_WINDOWS if platform.key == 'win32' else PROXY_DIRS_MACOS
     for entry in entries:
         try:
@@ -647,6 +681,9 @@ def find_default_merge_target(platform, home):
             continue
         if not common.exists(folder) or common.is_link(folder) or not folder.is_dir():
             continue
+        active = active_profile_file(folder)
+        if active is not None:
+            return active
         for candidate in (
             folder / 'profiles/Merge.yaml',
             folder / 'Merge.yaml',

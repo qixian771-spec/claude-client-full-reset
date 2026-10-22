@@ -8,6 +8,7 @@
 | 客户端 | `.claude.json`、Claude/Claude-3p App Support、plist、Caches、HTTPStorages、Logs、Saved State、`.config/claude`、`.anthropic` | 具体批准路径移入废纸篓，必须有备份 |
 | 安装 | `/Applications/Claude.app`、`~/Applications/Claude.app`、PATH 与常见位置的 `claude`、`~/.local/share/claude` 版本目录 | 应用本体可按明确路径移入废纸篓；版本目录在家目录内，需 `--include` 备份 |
 | 凭证 | 钥匙串项 `Claude Code-credentials`（只查是否存在）、`.claude/.credentials.json`、`~/.config/anthropic` | 不自动处理；只报告存在与否 |
+| 标识 | `identifiers.py`：`.claude.json` 的 userID / machineID / 账号与组织 UUID / 邮箱 / 首启时间；`Application Support/Claude` 的 `ant-did`、`ant-device-registry.json`、`ccd-ids.json` 盐、`config.json` 账号与首启、Sentry user/did/sid、Local Storage / Session Storage / IndexedDB 目录、Cookies、Cowork VM `machineIdentifier`；钥匙串只查存在 | 不改任何 ID；只记指纹；清理前后 `--compare` 证明已变（[标识清单](identifiers.md)） |
 | CLI 痕迹 | `.claude` 中 projects、history.jsonl、sessions、tasks、teams、shell-snapshots、session-env、file-history、paste-cache、.cc-writes、plans、debug、backups、cache、image-cache、uploads、dev-mods、usage-data、feedback、feedback-bundles、stats-cache.json、remote-settings.json、policy-limits.json(.stamp.json)、旧版 todos/statsig/logs | 同上；`projects/<项目>/memory/` 是自动记忆，处理 projects 会一并移走，预览会提示 |
 | 自有资产 | `.claude` 中 skills、agents、hooks、plugins、settings*.json、.credentials.json、CLAUDE.md、keybindings.json、themes、rules、commands、output-styles、workflows、agent-memory、jobs、daemon | 默认保留；整个 `.claude` 需明确授权 |
 | 未归类 | `.claude` 中不属于上两类的顶层名称（例如第三方工具文件），只列名称不读内容 | 不自动处理；检测报告 `unclassified_items` 列出供人工确认 |
@@ -28,6 +29,7 @@
 | 客户端 | `%USERPROFILE%\.claude.json`、`%APPDATA%\Claude`、`%APPDATA%\Claude-3p`、MSIX 包内 `LocalCache\Roaming\Claude(-3p)`（每个 `Claude_*` 包单独备份）、`%LOCALAPPDATA%\claude-cli-nodejs`、`.config\claude`、`.anthropic` | 具体批准路径移入回收站，必须有备份 |
 | 安装 | MSIX 包目录 `Claude_*`、`%LOCALAPPDATA%\AnthropicClaude`、`claude.exe`/`claude.cmd`（PATHEXT）、WinGet 链接、`%USERPROFILE%\.local\share\claude`、卸载项显示名称 | MSIX 应用本体（`WindowsApps`）和包根目录不处理，用系统“设置 → 应用”卸载 |
 | 凭证 | `%USERPROFILE%\.claude\.credentials.json`、`%APPDATA%\Anthropic` | 不自动处理；只报告存在与否 |
+| 标识 | 同 macOS，桌面端路径为 `%APPDATA%\Claude` 与 MSIX `…\LocalCache\Roaming\Claude`（id 带 `@msix`）；`.credentials.json` 记文件指纹 | 同 macOS |
 | Chromium | `%LOCALAPPDATA%` 下 Chrome、Chrome Beta、Chrome SxS（Canary）、Edge、Brave、Vivaldi、Chromium 的 `User Data`；profile 规则同 macOS；HTTP 缓存在 profile 内，默认扫描已包含 | 同 macOS |
 | Firefox | `%APPDATA%\Mozilla\Firefox\Profiles`，规则同 macOS | 只读扫描 |
 | 编辑器 | `.vscode`/`.cursor`/`.windsurf` 扩展名称；`%APPDATA%\Code|Cursor|Windsurf\User` 的 settings.json、state.vscdb 关键词 | 不自动编辑 |
