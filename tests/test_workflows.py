@@ -61,7 +61,8 @@ class Fixture(unittest.TestCase):
     def file(self, name, text='data'):
         p = self.home / name
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text)
+        # Fixtures may hold emoji/Chinese; Windows' default cp1252 cannot encode them.
+        p.write_text(text, encoding='utf-8')
         return p
 
     def copy_command(self, args):
@@ -545,10 +546,12 @@ class InstallationTests(Fixture):
         self.assertFalse((target / 'scripts/__pycache__').exists())
         # The .sh wrappers are macOS entry points; Windows runs scripts\*.py directly.
         for name in ('backup.sh', 'scan_readonly.sh', 'trash_paths.sh') if sys.platform != 'win32' else ():
-            result = subprocess.run(['bash', str(target / 'scripts' / name), '--help'], capture_output=True, text=True)
+            result = subprocess.run(['bash', str(target / 'scripts' / name), '--help'], capture_output=True,
+                                    encoding='utf-8', errors='replace')
             self.assertEqual(result.returncode, 0, result.stderr)
         for name in ('browser_scan.py', 'chrome_purge.py', 'verify_reset.py', 'check_environment.py', 'telemetry_routing.py'):
-            result = subprocess.run([sys.executable, str(target / 'scripts' / name), '--help'], capture_output=True, text=True)
+            result = subprocess.run([sys.executable, str(target / 'scripts' / name), '--help'], capture_output=True,
+                                    encoding='utf-8', errors='replace')
             self.assertEqual(result.returncode, 0, result.stderr)
         with self.assertRaises(FileExistsError):
             install.install(target)
