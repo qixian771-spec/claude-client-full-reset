@@ -94,11 +94,11 @@
 | `DOMAIN-SUFFIX` | `stripe.com`、`hcaptcha.com` | Stripe 订阅支付环境校验与 hCaptcha 登录人机验证 |
 | `DOMAIN` | `cdnjs.cloudflare.com`、`cdn.jsdelivr.net`、`cdn.tailwindcss.com`、`code.jquery.com`、`unpkg.com`、`fonts.googleapis.com`、`fonts.gstatic.com` | 官方文档列明的 Artifact 第三方 JS 库（React/图表/Tailwind 等）与 Google Fonts 字体主机 |
 
-### 模块 ⑥：分流兜底（IP/ASN/Geosite/NTP）与 `claude.ai` 进程兜底（`PROCESS-NAME`）
+### 模块 ⑥：分流兜底（IP/Geosite/NTP）与 `claude.ai` 进程兜底（`PROCESS-NAME`）
 
 | 类别 | 规则 | 为什么需要 |
 | --- | --- | --- |
-| **Anthropic IP / ASN 兜底** | `IP-CIDR,160.79.104.0/21,{proxy},no-resolve`<br>`IP-CIDR6,2607:6bc0::/32,{proxy},no-resolve`<br>`IP-ASN,399358,{proxy},no-resolve` | 当 DoH/ECH 加密或未知新子域绕过域名匹配时，按 Anthropic 自有 IPv4/IPv6 段与 AS399358 自治系统号兜底 |
+| **Anthropic IP 兜底** | `IP-CIDR,160.79.104.0/21,{proxy},no-resolve`<br>`IP-CIDR6,2607:6bc0::/32,{proxy},no-resolve` | 当 DoH/ECH 加密或未知新子域绕过域名匹配时，按 Anthropic 自有 IPv4/IPv6 段兜底。**不用 `IP-ASN,399358`**：mihomo 要先联网下载 ASN.mmdb，新机器还没有代理时下载超时，整份配置验证失败、Clash 退回最小配置 |
 | **Geosite 与 NTP 时区防泄露** | `GEOSITE,anthropic,{proxy}`<br>`GEOSITE,category-ntp,{proxy}` | 覆盖 `geosite:anthropic` 分类，并将 UDP NTP 时间同步纳入代理出口，防止系统校时直连暴露真实时区 |
 | **`claude.ai` 客户端与 CLI 进程兜底** | macOS / Linux：`PROCESS-NAME,Claude`、`Claude Helper`、`Claude Helper (Renderer)`、`Claude Helper (GPU)`、`Claude Helper (Plugin)`、`chrome-native-host`、`claude`<br>Windows：`PROCESS-NAME,Claude.exe`、`claude.exe`、`chrome-native-host.exe` | 桌面端承载 `claude.ai` 会话、内置任务引擎与 CLI 子进程在发起直接连接、WebSocket 桥接或非域名流量时，按进程名强制走同一代理出口，彻底堵死直连漏出 |
 

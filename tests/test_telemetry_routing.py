@@ -207,5 +207,13 @@ class TelemetryRoutingTests(Fixture):
         self.assertIsNone(TR.active_profile_file(folder))
 
 
+class NoAsnRuleTests(unittest.TestCase):
+    def test_no_ip_asn_rule(self):
+        # IP-ASN 让 mihomo 先联网下载 ASN.mmdb，新机器没有代理时整份配置验证失败
+        kinds = [r[0] for _key, _title, rules in TR.RULE_MODULES for r in rules]
+        self.assertNotIn('IP-ASN', kinds)
+        self.assertIn('IP-CIDR', kinds)
+
+
 if __name__ == '__main__':
     unittest.main()

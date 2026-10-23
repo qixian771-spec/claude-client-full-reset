@@ -10,7 +10,7 @@ Designed for direct AI execution after cloning from GitHub:
     2. CDN 与静态/认证基础设施 (CDN)
     3. 监测和上报 / 遥测 (Telemetry & Monitoring)
     4. 第三方组件与前端库/客服 (Third-party)
-    5. 分流规则与 IP/ASN/NTP 兜底 (Routing & IP/ASN/NTP Fallback)
+    5. 分流规则与 IP/NTP 兜底 (Routing & IP/NTP Fallback)
     6. claude.ai 客户端与 CLI 进程兜底 (Process Fallback)
 - Auto-detects the existing proxy group name (e.g., from an existing claude.ai
   or anthropic.com rule in the user's Clash/Mihomo config) when --proxy-group
@@ -164,10 +164,10 @@ RULE_MODULES = (
         ('DOMAIN', 'fonts.googleapis.com', '{proxy}', 'Artifact Google Fonts 样式表'),
         ('DOMAIN', 'fonts.gstatic.com', '{proxy}', 'Artifact Google Fonts 字体文件'),
     )),
-    ('routing_rules', '5. 分流规则：IP 段 / ASN / Geosite / NTP 时区防泄露兜底 (Routing & IP/ASN/NTP Fallback)', (
+    ('routing_rules', '5. 分流规则：IP 段 / Geosite / NTP 时区防泄露兜底 (Routing & IP/NTP Fallback)', (
         ('IP-CIDR', '160.79.104.0/21', '{proxy},no-resolve', 'Anthropic 自有 IPv4 段 (160.79.104.0 ~ 160.79.111.255) 兜底'),
         ('IP-CIDR6', '2607:6bc0::/32', '{proxy},no-resolve', 'Anthropic 自有 IPv6 段兜底'),
-        ('IP-ASN', '399358', '{proxy},no-resolve', 'Anthropic, PBC 自治系统号 (AS399358) 路由兜底'),
+        # 不放 IP-ASN：mihomo 要先联网下载 ASN.mmdb，新机器还没有代理时下载超时，整份配置验证失败（2026-10-23 Windows 实机）。
         ('GEOSITE', 'anthropic', '{proxy}', 'v2fly / Mihomo 内置 geosite:anthropic 分类兜底'),
         ('GEOSITE', 'category-ntp', '{proxy}', 'NTP 时间同步分流兜底（防 UDP 校时直连暴露真实本地时区）'),
     )),
@@ -564,7 +564,7 @@ def render_classical_list(modules):
             continue
         lines.append(f'# === {mod["title"]} ===')
         for item in items:
-            if item['type'] in ('IP-CIDR', 'IP-CIDR6', 'IP-ASN'):
+            if item['type'] in ('IP-CIDR', 'IP-CIDR6'):
                 lines.append(f'{item["type"]},{item["target"]},no-resolve')
             else:
                 lines.append(f'{item["type"]},{item["target"]}')
